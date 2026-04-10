@@ -3,6 +3,7 @@ name: PR CI - Spring Boot Build
 on:
   pull_request:
     branches: [ "main" ]
+    paths: ["backend/**"]
 
 jobs:
   build:
