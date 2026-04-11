@@ -1,0 +1,16 @@
+{
+  "name": "TechForum Pro Environment",
+  "dockerComposeFile": "../../docker-compose.yml",
+
+  "service": "app",
+
+  "workspaceFolder": "/workspaces/techforum-pro/backend",
+
+  "customizations": {
+    "jetbrains": {
+      "backend": "IntelliJ"
+    }
+  },
+
+  "forwardPorts": [8080, 5432, 6379]
+}
