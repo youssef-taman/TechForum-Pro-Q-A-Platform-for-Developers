@@ -3,9 +3,7 @@ name: PR CI - Frontend React Build
 on:
   pull_request:
     branches: [ "main" ]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/pr-ci-front.yaml"
+    paths: ["frontend/**"]
 
 jobs:
   build:
@@ -21,7 +19,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
         working-directory: ./frontend
 
       - name: Lint code
