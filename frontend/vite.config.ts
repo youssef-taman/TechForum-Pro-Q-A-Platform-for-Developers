@@ -1,7 +1,5 @@
 import { defineConfig } from 'vite'
-// @ts-expect-error - resolved at runtime from frontend devDependencies
 import react from '@vitejs/plugin-react'
-// @ts-expect-error - resolved at runtime from frontend devDependencies
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
