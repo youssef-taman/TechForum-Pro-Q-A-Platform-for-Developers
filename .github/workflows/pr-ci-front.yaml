@@ -3,7 +3,9 @@ name: PR CI - Frontend React Build
 on:
   pull_request:
     branches: [ "main" ]
-    paths: ["frontend/**"]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/pr-ci-front.yaml"
 
 jobs:
   build:
