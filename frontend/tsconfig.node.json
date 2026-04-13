@@ -8,6 +8,7 @@
     "types": ["node"],
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    "typeRoots": ["./node_modules/@types"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
