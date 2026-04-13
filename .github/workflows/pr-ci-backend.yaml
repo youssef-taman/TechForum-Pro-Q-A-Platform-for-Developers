@@ -5,9 +5,17 @@ on:
     branches: [ "main" ]
     paths: ["backend/**"]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ci-backend-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -20,8 +28,8 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Build and Test with Maven
-        run: mvn -B clean package
+      - name: Build and Test with Maven Wrapper
+        run: ./mvnw -B clean package
         working-directory: ./backend
 
       - name: Upload Test Results
