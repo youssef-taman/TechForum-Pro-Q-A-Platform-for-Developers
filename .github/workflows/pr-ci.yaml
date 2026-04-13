@@ -19,6 +19,7 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
           cache: 'maven'
+          cache-dependency-path: 'backend/pom.xml'
 
       - name: Build and Test with Maven
         run: mvn -B clean package
