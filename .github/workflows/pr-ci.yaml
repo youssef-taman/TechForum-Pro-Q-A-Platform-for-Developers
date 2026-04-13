@@ -16,10 +16,20 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
 
-      - name: Build with Maven
-        run: mvn clean package
+      - name: Build and Test with Maven
+        run: mvn -B clean package
         working-directory: ./backend
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: backend/target/surefire-reports/
+
+      - name: Verify Dockerfile
+        run: docker build -t techforum-backend-test ./backend
