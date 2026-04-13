@@ -1,6 +1,5 @@
-import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
-import { LayoutGrid, MessageSquare, User, Bell, Search } from 'lucide-react';
+import { LayoutGrid, User, Bell, Search } from 'lucide-react';
 
 const Layout = () => {
   return (
