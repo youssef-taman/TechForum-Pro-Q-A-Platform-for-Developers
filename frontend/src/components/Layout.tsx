@@ -4,7 +4,7 @@ import { LayoutGrid, MessageSquare, User, Bell, Search } from 'lucide-react';
 
 const Layout = () => {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <dinbjiv className="min-h-screen bg-slate-50">
       <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <Link to="/" className="flex items-center gap-2">
