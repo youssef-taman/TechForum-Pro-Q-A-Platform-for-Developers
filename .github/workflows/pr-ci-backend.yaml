@@ -17,6 +17,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: techforum_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,6 +46,10 @@ jobs:
       - name: Build and Test with Maven Wrapper
         run: ./mvnw -B clean package
         working-directory: ./backend
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/techforum_db
+          SPRING_DATASOURCE_USERNAME: test_user
+          SPRING_DATASOURCE_PASSWORD: test_password
 
       - name: Upload Test Results
         if: always()
@@ -39,5 +58,33 @@ jobs:
           name: test-results
           path: backend/target/surefire-reports/
 
-      - name: Verify Dockerfile
-        run: docker build -t techforum-backend-test ./backend
+      - name: Generate OpenAPI Spec
+        run: ./mvnw springdoc-openapi:generate
+        working-directory: ./backend
+
+      - name: Upload Swagger JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: swagger-api-docs
+          path: backend/target/openapi.json
+
+      - name: Generate Database Documentation
+        uses: rlespinasse/github-action-schemaspy@master
+        with:
+          database_type: pgsql
+          database_host: localhost
+          database_port: 5432
+          database_name: techforum_db
+          database_user: test_user
+          database_password: test_password
+
+      - name: Upload DB Docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-erd-docs
+          path: output/
+
+      - name: Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

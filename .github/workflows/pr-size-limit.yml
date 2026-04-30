@@ -1,0 +1,25 @@
+name: "PR Size Limit Checker"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-size:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce PR File Limit
+        run: |
+          MAX_FILES=10
+          CHANGED_FILES=${{ github.event.pull_request.changed_files }}
+          
+          echo "This PR changes $CHANGED_FILES files."
+          
+          if [ "$CHANGED_FILES" -gt "$MAX_FILES" ]; then
+            echo "Error: PR is too large!"
+            echo "You modified $CHANGED_FILES files, but the maximum allowed is $MAX_FILES."
+            echo "Please split your work into smaller Pull Requests."
+            exit 1
+          else
+            echo "PR size is good."
+          fi

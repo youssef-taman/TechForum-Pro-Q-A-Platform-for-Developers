@@ -1,0 +1,25 @@
+name: "PR Commit Limit Checker"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce PR Commit Limit
+        run: |
+          MAX_COMMITS=5
+          COMMITS_COUNT=${{ github.event.pull_request.commits }}
+          
+          echo "This PR contains $COMMITS_COUNT commits."
+          
+          if [ "$COMMITS_COUNT" -gt "$MAX_COMMITS" ]; then
+            echo "Error: PR has too many commits!"
+            echo "You have $COMMITS_COUNT commits, but the maximum allowed is $MAX_COMMITS."
+            echo "Please squash your commits to keep the history clean."
+            exit 1
+          else
+            echo "PR commit count is good."
+          fi
