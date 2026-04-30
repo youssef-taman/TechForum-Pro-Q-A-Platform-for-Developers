@@ -1,0 +1,68 @@
+
+services:
+
+  app:
+    image: mcr.microsoft.com/devcontainers/java:21
+    container_name: Spring-Boot
+    volumes:
+      - ./backend:/workspaces/techforum-pro/backend:cached
+    tty: true
+    stdin_open: true
+    depends_on:
+      - db
+      - redis
+      - ai-service
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+
+  db:
+    image: pgvector/pgvector:0.8.2-pg16
+    container_name: PostgreSQL
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+      - JWT_SECRET_KEY={JWT_SECRET_KEY}
+      - JWT_EXPIRATION_TIME={JWT_EXPIRATION_TIME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: Redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  frontend:
+    image: node:20-alpine
+    container_name: React-Vite
+    working_dir: /workspaces/techforum-pro/frontend
+    volumes:
+      - ./frontend:/workspaces/techforum-pro/frontend:cached
+    ports:
+      - "5173:5173"
+    depends_on:
+      - app
+    command: sh -c "npm install && npm run dev -- --host"
+
+  ai-service:
+    image: python:3.12-slim
+    container_name: AI-Service
+    working_dir: /workspaces/techforum-pro/ai-service
+    volumes:
+      - ./ai-service:/workspaces/techforum-pro/ai-service:cached
+    environment:
+      - LLM_API_KEY={LLM_API_KEY}
+    ports:
+      - "50051:50051"
+    command: sh -c "pip install -r requirements.txt && python server.py"
+
+volumes:
+  postgres_data:
+  redis_data:
