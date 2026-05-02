@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Properties>
+        <Property name="CONSOLE_PATTERN">%d{HH:mm:ss.SSS} %highlight{%-5level} [%style{%t}{magenta}] %style{%logger{36}}{cyan} - %msg%n</Property>
+        <Property name="FILE_PATTERN">%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${CONSOLE_PATTERN}"/>
+        </Console>
+
+        <File name="FileLogger" fileName="logs/techforum-run-${date:yyyy-MM-dd_HH-mm-ss}.log" append="true">
+            <PatternLayout pattern="${FILE_PATTERN}"/>
+        </File>
+    </Appenders>
+
+    <Loggers>
+        <!-- 1. General Framework Noise Reduction -->
+        <Logger name="org.springframework" level="info"/>
+        <Logger name="org.hibernate" level="info"/>
+        <Logger name="com.zaxxer.hikari" level="warn"/>
+
+        <!-- 2. Deep Debugging Overrides -->
+        <Logger name="org.hibernate.SQL" level="debug"/>
+        <Logger name="org.springframework.web" level="debug"/>
+        <Logger name="org.springframework.security" level="trace"/>
+
+        <!-- 3. Application Code -->
+        <Logger name="com.techforum.backend" level="debug"/>
+
+        <!-- Activate the appenders -->
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="FileLogger"/>
+        </Root>
+    </Loggers>
+</Configuration>
