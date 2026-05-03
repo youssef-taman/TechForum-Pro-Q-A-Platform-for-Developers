@@ -16,6 +16,8 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRATION_TIME=${JWT_EXPIRATION_TIME}
 
   db:
     image: pgvector/pgvector:0.8.2-pg16
@@ -24,8 +26,6 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
-      - JWT_SECRET_KEY={JWT_SECRET_KEY}
-      - JWT_EXPIRATION_TIME={JWT_EXPIRATION_TIME}
     ports:
       - "5432:5432"
     volumes:
@@ -58,7 +58,7 @@ services:
     volumes:
       - ./ai-service:/workspaces/techforum-pro/ai-service:cached
     environment:
-      - LLM_API_KEY={LLM_API_KEY}
+      - LLM_API_KEY=${LLM_API_KEY}
     ports:
       - "50051:50051"
     command: sh -c "pip install -r requirements.txt && python server.py"

@@ -48,5 +48,6 @@ public class User extends BaseEntity {
     private Instant createdAt;
 
     @Column(name = "is_suspended", nullable = false)
+    @Builder.Default
     private boolean isSuspended = false;
 }
