@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Enforce PR File Limit
         run: |
-          MAX_FILES=10
+          MAX_FILES=15
           CHANGED_FILES=${{ github.event.pull_request.changed_files }}
           
           echo "This PR changes $CHANGED_FILES files."

@@ -1,0 +1,30 @@
+name: Generate Git Graph
+on:
+  push:
+    branches:
+      - 'main'
+permissions:
+  contents: write
+jobs:
+  generate-graph:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Initialize File
+        run: |
+          mkdir -p docs
+          echo "# Git Branching Strategy" > docs/git-graph.md
+          echo "" >> docs/git-graph.md
+          echo '```text' >> docs/git-graph.md
+          git log --all --graph --simplify-by-decoration --oneline >> docs/git-graph.md
+          echo '```' >> docs/git-graph.md
+
+      - name: Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/git-graph.md
+          git commit -m "docs: update git graph" || exit 0
+          git push
