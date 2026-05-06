@@ -1,7 +1,7 @@
 package com.techforum.backend.domain.auth.filter;
 
-import com.techforum.backend.domain.auth.jwt.JwtUtil;
 import com.techforum.backend.domain.auth.UserPrincipal;
+import com.techforum.backend.domain.auth.jwt.JwtUtil;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -11,6 +11,7 @@ import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -63,8 +64,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     final String jwtToken = authHeader.substring(BEARER_PREFIX.length());
 
     try {
-      // Guard 2: Ignore tokens that have been revoked via logout
-      if (Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + jwtToken))) {
+      // Guard 2: Safely check the Redis blacklist
+      boolean isBlacklisted = false;
+      try {
+        isBlacklisted = Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + jwtToken));
+      } catch (RedisConnectionFailureException e) {
+        log.error(
+            "CRITICAL: Redis is unreachable. Skipping JWT authentication for safety. URI: {}",
+            request.getRequestURI());
+        filterChain.doFilter(request, response);
+        return;
+      }
+
+      if (isBlacklisted) {
         log.warn("Blocked request using blacklisted token. URI: {}", request.getRequestURI());
         filterChain.doFilter(request, response);
         return;
@@ -90,6 +102,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       UserPrincipal userPrincipal =
           (UserPrincipal) this.userDetailsService.loadUserByUsername(username);
 
+      if (!userPrincipal.isAccountNonLocked()) {
+        log.warn("Blocked JWT for suspended user: {}. URI: {}", username, request.getRequestURI());
+        filterChain.doFilter(request, response);
+        return;
+      }
+
       // Guard 4: Validate the claims against the user details
       if (!jwtUtil.isTokenValid(jwtToken, userPrincipal)) {
         log.warn(
@@ -113,5 +131,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     filterChain.doFilter(request, response);
+  }
+
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    String path = request.getServletPath();
+
+    return path.startsWith("/auth/login") ||
+        path.startsWith("/auth/register") ||
+        path.startsWith("/swagger-ui") ||
+        path.startsWith("/v3/api-docs");
   }
 }

@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 import javax.crypto.SecretKey;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -79,7 +80,7 @@ public class JwtUtil {
   /** Validates the token by checking if the username matches and if the token is expired. */
   public boolean isTokenValid(String token, UserPrincipal userPrincipal) {
     final String username = extractUsername(token);
-    return (username.equals(userPrincipal.getUsername()) && !isTokenExpired(token));
+    return (Objects.equals(username, userPrincipal.getUsername()) && !isTokenExpired(token));
   }
 
   /** Checks if the current token has passed its expiration date. */

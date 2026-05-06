@@ -1,16 +1,20 @@
 package com.techforum.backend.common.handler;
 
 import com.techforum.backend.common.exception.ConflictException;
+import com.techforum.backend.common.exception.InfrastructureException;
 import com.techforum.backend.common.response.ApiErrorResponse;
 import com.techforum.backend.domain.auth.AuthService;
 import com.techforum.backend.domain.auth.SecurityConfig;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -42,17 +46,15 @@ public class GlobalExceptionHandler {
    * Handles authentication failures — wrong password or unknown user.
    *
    * <p><b>Security:</b> Both {@link BadCredentialsException} and {@link UsernameNotFoundException}
-   * are mapped to the same generic message intentionally. Returning different messages for each
-   * case would allow attackers to list valid usernames through repeated login attempts (Username
-   * Enumeration attack).
+   * are mapped to the same generic message intentionally to prevent Username/Email Enumeration
+   * attacks.
    *
    * @return {@code 401 Unauthorized} with a generic credential error message.
    */
-  @ExceptionHandler({BadCredentialsException.class, UsernameNotFoundException.class})
+  @ExceptionHandler({BadCredentialsException.class, UsernameNotFoundException.class, LockedException.class})
   public ResponseEntity<ApiErrorResponse> handleAuthenticationErrors(Exception ex) {
     return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-        .body(
-            ApiErrorResponse.builder().status(401).message("Invalid username or password").build());
+        .body(ApiErrorResponse.builder().status(401).message("Invalid credentials").build());
   }
 
   /**
@@ -69,6 +71,18 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiErrorResponse> handleConflict(ConflictException ex) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
         .body(ApiErrorResponse.builder().status(409).message(ex.getMessage()).build());
+  }
+
+  /** Catches any database-level unique constraint violations globally. */
+  @ExceptionHandler(DataIntegrityViolationException.class)
+  public ResponseEntity<ApiErrorResponse> handleDataIntegrityViolation(
+      DataIntegrityViolationException ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            ApiErrorResponse.builder()
+                .status(409)
+                .message("A database conflict occurred. This record might already exist.")
+                .build());
   }
 
   /**
@@ -103,6 +117,36 @@ public class GlobalExceptionHandler {
   }
 
   /**
+   * Handles malformed JSON and invalid request body formats.
+   *
+   * <p>Catches cases where:
+   * <ul>
+   *   <li>Request body contains invalid JSON syntax</li>
+   *   <li>Request body is a JSON array instead of an object</li>
+   *   <li>Request body is not valid JSON at all (e.g., plain text)</li>
+   * </ul>
+   *
+   * <p>Spring's HttpMessageConverter throws {@link HttpMessageNotReadableException} when it cannot
+   * deserialize the request body into the expected DTO class. This is a validation-level error and
+   * should return 400 Bad Request, not 500 Internal Server Error.
+   *
+   * @return {@code 400 Bad Request} with descriptive error message.
+   */
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadable(
+      HttpMessageNotReadableException ex) {
+    String message = "Invalid request body format. Expected a JSON object, not an array or malformed JSON.";
+
+    // Log the underlying cause for debugging
+    if (ex.getCause() != null) {
+      log.debug("HTTP message not readable. Root cause: {}", ex.getCause().getMessage());
+    }
+
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(ApiErrorResponse.builder().status(400).message(message).build());
+  }
+
+  /**
    * THE CATCH-ALL: Prevents massive Java stack traces from leaking to the frontend if something
    * completely unexpected breaks.
    */
@@ -130,5 +174,16 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
         .body(ApiErrorResponse.builder().status(403).message("Access denied").build());
+  }
+
+  /**
+   * Handles critical infrastructure failures (like Redis outages) so the client doesn't receive a
+   * false sense of success.
+   */
+  @ExceptionHandler(InfrastructureException.class)
+  public ResponseEntity<ApiErrorResponse> handleInfrastructureException(
+      InfrastructureException ex) {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .body(ApiErrorResponse.builder().status(503).message(ex.getMessage()).build());
   }
 }

@@ -1,9 +1,9 @@
 package com.techforum.backend.domain.auth;
 
 import com.techforum.backend.domain.user.User;
+import com.techforum.backend.domain.user.enums.RoleType;
 import java.util.Collection;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
@@ -12,17 +12,14 @@ import org.springframework.security.core.userdetails.UserDetails;
 /**
  * Spring Security's {@link UserDetails} adapter over the domain {@link User} entity.
  *
- * <p>Maps the user's {@link com.techforum.backend.domain.user.enums.RoleType} to a {@link
- * UserAuthority} so Spring Security can enforce role-based access control.
+ * <p>Maps the user's {@link RoleType} to a {@link UserAuthority} so Spring Security can enforce
+ * role-based access control.
  *
  * <p><b>Important:</b> {@link #isAccountNonLocked()} is overridden to respect the {@code
  * isSuspended} flag on the {@link User} entity. A suspended user will be refused authentication by
  * Spring Security's {@code AbstractUserDetailsAuthenticationProvider}.
  */
-@RequiredArgsConstructor
-public class UserPrincipal implements UserDetails {
-
-  private final User user;
+public record UserPrincipal(User user) implements UserDetails {
 
   @Override
   public @NonNull Collection<? extends GrantedAuthority> getAuthorities() {

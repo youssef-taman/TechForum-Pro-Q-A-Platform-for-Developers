@@ -1,6 +1,7 @@
 package com.techforum.backend.domain.auth;
 
 import com.techforum.backend.common.exception.ConflictException;
+import com.techforum.backend.common.exception.InfrastructureException;
 import com.techforum.backend.domain.auth.dto.AuthResponseDTO;
 import com.techforum.backend.domain.auth.dto.LoginRequestDTO;
 import com.techforum.backend.domain.auth.dto.RegisterRequestDTO;
@@ -10,11 +11,16 @@ import com.techforum.backend.domain.user.UserRepository;
 import com.techforum.backend.domain.user.enums.RoleType;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -41,8 +47,11 @@ public class AuthService {
    * @throws ConflictException if the username or email already exists.
    */
   public AuthResponseDTO register(RegisterRequestDTO request) {
-    if (userRepository.existsByUsernameOrEmail(
-        request.getUsername().toLowerCase(), request.getEmail().toLowerCase())) {
+    String normalizedUsername = request.getUsername().toLowerCase();
+    String normalizedEmail = request.getEmail().toLowerCase();
+
+    if (userRepository.existsByUsernameOrEmail(normalizedUsername, normalizedEmail)
+        || userRepository.existsByUsernameOrEmail(normalizedEmail, normalizedUsername)) {
       throw new ConflictException("User already exists");
     }
 
@@ -56,7 +65,11 @@ public class AuthService {
             .role(RoleType.USER)
             .build();
 
-    userRepository.save(newUser);
+    try {
+      userRepository.save(newUser);
+    } catch (DataIntegrityViolationException e) {
+      throw new ConflictException("User already exists");
+    }
 
     String jwtToken = jwtUtil.generateToken(newUser.getUsername());
 
@@ -81,10 +94,14 @@ public class AuthService {
    * @throws org.springframework.security.core.AuthenticationException if authentication fails.
    */
   public AuthResponseDTO login(LoginRequestDTO request) {
-    authenticationManager.authenticate(
-        new UsernamePasswordAuthenticationToken(request.getIdentifier(), request.getPassword()));
+    Authentication authentication = authenticationManager.authenticate(
+        new UsernamePasswordAuthenticationToken(request.getIdentifier(), request.getPassword())
+    );
 
-    User user = userRepository.findByIdentifier(request.getIdentifier()).orElseThrow();
+    UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+
+    assert userPrincipal != null;
+    User user = userPrincipal.user();
 
     String jwtToken = jwtUtil.generateToken(user.getUsername());
 
@@ -112,17 +129,25 @@ public class AuthService {
     }
 
     String token = authorizationHeader.substring(7);
+    long remainingTime;
 
     try {
-      long remainingTime = jwtUtil.extractExpiration(token).getTime() - System.currentTimeMillis();
+      remainingTime = jwtUtil.extractExpiration(token).getTime() - System.currentTimeMillis();
+    } catch (JwtException | IllegalArgumentException e) {
+      log.info("Logout requested for an already invalid or expired token.");
+      return;
+    }
 
-      if (remainingTime > 0) {
+    if (remainingTime > 0) {
+      try {
         redisTemplate
             .opsForValue()
             .set("blacklist:" + token, "revoked", remainingTime, TimeUnit.MILLISECONDS);
+      } catch (DataAccessException e) {
+        log.error("CRITICAL: Failed to write to Redis blacklist during logout.");
+        throw new InfrastructureException("Logout service is temporarily unavailable.", e);
       }
-    } catch (Exception e) {
-      log.warn("Logout attempted with invalid or expired token");
     }
+
   }
 }

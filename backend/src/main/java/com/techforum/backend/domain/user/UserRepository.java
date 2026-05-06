@@ -9,32 +9,38 @@ import org.springframework.data.repository.query.Param;
 public interface UserRepository extends JpaRepository<User, UUID> {
 
   /**
-   * Finds an active user by their username or email.
+   * Finds an active user by their username or email, completely ignoring case.
    *
-   * @param username The exact username to look up, lowercased.
+   * @param identifier The username or email to look up.
    * @return An {@link Optional} containing the user if found.
    */
   @Query(
       """
           SELECT u FROM User u
-          WHERE u.username = :identifier
-             OR u.email = :identifier
+          WHERE LOWER(u.username) = LOWER(:identifier)
+             OR LOWER(u.email) = LOWER(:identifier)
       """)
   Optional<User> findByIdentifier(@Param("identifier") String identifier);
 
   /**
    * Returns {@code true} if any user exists with the given username OR the given email.
    *
-   * <p>Used during registration to enforce uniqueness across both fields independently.
-   * Both parameters should be pre-normalized to lowercase before calling, consistent
-   * with how values are persisted, to ensure case-insensitive matching.
+   * <p>Used during registration to enforce uniqueness across both fields independently. Matching is
+   * performed case-insensitively at the query level, so existing mixed-case persisted values are
+   * still detected correctly.
    *
-   * <p><b>Note:</b> This is an OR check, a single existing user matching either field
-   * is sufficient to return {@code true}.
+   * <p><b>Note:</b> This is an OR check, a single existing user matching either field is enough
+   * to return {@code true}.
    *
-   * @param username The candidate username, lowercased.
-   * @param email    The candidate email, lowercased.
+   * @param username The candidate username.
+   * @param email The candidate email.
    * @return {@code true} if a conflict exists on either field.
    */
-  boolean existsByUsernameOrEmail(String username, String email);
+  @Query(
+      """
+          SELECT COUNT(u) > 0 FROM User u
+          WHERE LOWER(u.username) = LOWER(:username)
+             OR LOWER(u.email) = LOWER(:email)
+      """)
+  boolean existsByUsernameOrEmail(@Param("username") String username, @Param("email") String email);
 }

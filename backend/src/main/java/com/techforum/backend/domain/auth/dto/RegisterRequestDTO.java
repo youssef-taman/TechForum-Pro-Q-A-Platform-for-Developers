@@ -23,7 +23,7 @@ public class RegisterRequestDTO {
   private String password;
 
   @NotBlank
-  @Size(min = 8, max = 30)
+  @Size(min = 3, max = 30)
   @JsonProperty("username")
   private String username;
 }
