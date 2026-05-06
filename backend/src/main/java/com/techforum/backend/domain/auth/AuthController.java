@@ -5,7 +5,9 @@ import com.techforum.backend.domain.auth.dto.LoginRequestDTO;
 import com.techforum.backend.domain.auth.dto.RegisterRequestDTO;
 import com.techforum.backend.domain.auth.filter.JwtAuthFilter;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -87,8 +89,9 @@ public class AuthController {
       responses = {
         @ApiResponse(responseCode = "204", description = "Token revoked or already expired")
       })
+  @SecurityRequirement(name = "Bearer Authentication")
   @PostMapping("/logout")
-  public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authorizationHeader) {
+  public ResponseEntity<Void> logout(@Parameter(hidden = true) @RequestHeader("Authorization") String authorizationHeader) {
     authService.logout(authorizationHeader);
     return ResponseEntity.noContent().build();
   }

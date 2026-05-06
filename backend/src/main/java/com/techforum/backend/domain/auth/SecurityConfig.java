@@ -6,6 +6,7 @@ import com.techforum.backend.domain.auth.filter.JwtAuthFilter;
 import lombok.AllArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -60,19 +61,18 @@ public class SecurityConfig {
   }
 
   @Bean
+  @Order(1)
   public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
     return httpSecurity
+        .securityMatcher("/**")
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        // NOTE: /auth/** is open to allow unauthenticated login and registration.
-        // Actuator and Swagger endpoints are whitelisted for ops/dev convenience -
-        // consider restricting these behind an internal network or IP filter in production.
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/auth/**")
-                    .permitAll()
+                auth.requestMatchers("/auth/login", "/auth/register").permitAll()
+                    .requestMatchers("/auth/logout").authenticated()
                     .requestMatchers(ACTUATOR_WHITELIST)
                     .permitAll()
                     .requestMatchers(SWAGGER_WHITELIST)
