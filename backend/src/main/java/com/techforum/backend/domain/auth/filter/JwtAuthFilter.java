@@ -8,6 +8,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
@@ -28,6 +29,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
   private static final String AUTH_HEADER = "Authorization";
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String BLACKLIST_PREFIX = "blacklist:";
+  private static final String[] PUBLIC_PATH_PREFIXES = {
+    "/auth/login", "/auth/register", "/swagger-ui", "/v3/api-docs"
+  };
 
   private final JwtUtil jwtUtil;
   private final StringRedisTemplate redisTemplate;
@@ -36,9 +40,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
   /**
    * Intercepts incoming HTTP requests to validate JWT access tokens.
    *
-   * <p>If a valid token is found and is not blacklisted (e.g., from a logged-out session), this
-   * filter extracts the user details and injects the authentication context into the Spring
-   * Security Context Holder.
+   * <p>If a valid token is found and is not blacklisted, this filter extracts the user details and
+   * injects the authentication context into the Spring Security Context Holder.
    *
    * @param request The incoming HTTP request.
    * @param response The outgoing HTTP response.
@@ -48,98 +51,106 @@ public class JwtAuthFilter extends OncePerRequestFilter {
    */
   @Override
   protected void doFilterInternal(
-      HttpServletRequest request,
+      @NonNull HttpServletRequest request,
       @NonNull HttpServletResponse response,
       @NonNull FilterChain filterChain)
       throws ServletException, IOException {
 
-    final String authHeader = request.getHeader(AUTH_HEADER);
+    Optional<String> token = extractBearerToken(request);
 
-    // Guard 1: Ignore requests without a properly formatted Bearer token
+    token.ifPresent(s -> authenticateRequest(request, s));
+
+    filterChain.doFilter(request, response);
+  }
+
+  private Optional<String> extractBearerToken(HttpServletRequest request) {
+    String authHeader = request.getHeader(AUTH_HEADER);
+
     if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
-      filterChain.doFilter(request, response);
-      return;
+      return Optional.empty();
     }
 
-    final String jwtToken = authHeader.substring(BEARER_PREFIX.length());
+    return Optional.of(authHeader.substring(BEARER_PREFIX.length()));
+  }
+
+  private void authenticateRequest(HttpServletRequest request, String token) {
+    String requestUri = request.getRequestURI();
 
     try {
-      // Guard 2: Safely check the Redis blacklist
-      boolean isBlacklisted = false;
-      try {
-        isBlacklisted = Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + jwtToken));
-      } catch (RedisConnectionFailureException e) {
-        log.error(
-            "CRITICAL: Redis is unreachable. Skipping JWT authentication for safety. URI: {}",
-            request.getRequestURI());
-        filterChain.doFilter(request, response);
+      if (isBlacklisted(token, requestUri) || isAlreadyAuthenticated()) {
         return;
       }
 
-      if (isBlacklisted) {
-        log.warn("Blocked request using blacklisted token. URI: {}", request.getRequestURI());
-        filterChain.doFilter(request, response);
-        return;
-      }
+      String username = jwtUtil.extractUsername(token);
 
-      final String username = jwtUtil.extractUsername(jwtToken);
-
-      // Guard 3a: Log and skip if username could not be extracted from a present token
       if (username == null) {
         log.warn(
             "JWT token present but username could not be extracted — possible malformed token. URI: {}",
-            request.getRequestURI());
-        filterChain.doFilter(request, response);
+            requestUri);
         return;
       }
 
-      // Guard 3b: Skip if the user is already authenticated in this request cycle
-      if (SecurityContextHolder.getContext().getAuthentication() != null) {
-        filterChain.doFilter(request, response);
-        return;
-      }
-
-      UserPrincipal userPrincipal =
-          (UserPrincipal) this.userDetailsService.loadUserByUsername(username);
+      UserPrincipal userPrincipal = (UserPrincipal) userDetailsService.loadUserByUsername(username);
 
       if (!userPrincipal.isAccountNonLocked()) {
-        log.warn("Blocked JWT for suspended user: {}. URI: {}", username, request.getRequestURI());
-        filterChain.doFilter(request, response);
+        log.warn("Blocked JWT for suspended user: {}. URI: {}", username, requestUri);
         return;
       }
 
-      // Guard 4: Validate the claims against the user details
-      if (!jwtUtil.isTokenValid(jwtToken, userPrincipal)) {
-        log.warn(
-            "JWT claims validation failed for user: {}. URI: {}",
-            username,
-            request.getRequestURI());
-        filterChain.doFilter(request, response);
+      if (!jwtUtil.isTokenValid(token, userPrincipal)) {
+        log.warn("JWT claims validation failed for user: {}. URI: {}", username, requestUri);
         return;
       }
 
-      // Success: All checks passed, set the authentication state
-      UsernamePasswordAuthenticationToken authToken =
-          new UsernamePasswordAuthenticationToken(
-              userPrincipal, null, userPrincipal.getAuthorities());
-
-      authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-      SecurityContextHolder.getContext().setAuthentication(authToken);
+      SecurityContextHolder.getContext()
+          .setAuthentication(buildAuthenticationToken(userPrincipal, request));
 
     } catch (JwtException e) {
       log.warn("Rejected Invalid JWT: {}", e.getMessage());
     }
+  }
 
-    filterChain.doFilter(request, response);
+  private boolean isBlacklisted(String token, String requestUri) {
+    try {
+      boolean blacklisted = Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + token));
+
+      if (blacklisted) {
+        log.warn("Blocked request using blacklisted token. URI: {}", requestUri);
+      }
+
+      return blacklisted;
+    } catch (RedisConnectionFailureException e) {
+      log.error(
+          "CRITICAL: Redis is unreachable. Skipping JWT authentication for safety. URI: {}",
+          requestUri);
+      return true;
+    }
+  }
+
+  private boolean isAlreadyAuthenticated() {
+    return SecurityContextHolder.getContext().getAuthentication() != null;
+  }
+
+  private UsernamePasswordAuthenticationToken buildAuthenticationToken(
+      UserPrincipal userPrincipal, HttpServletRequest request) {
+    UsernamePasswordAuthenticationToken authToken =
+        new UsernamePasswordAuthenticationToken(
+            userPrincipal, null, userPrincipal.getAuthorities());
+
+    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+    return authToken;
   }
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getServletPath();
 
-    return path.startsWith("/auth/login") ||
-        path.startsWith("/auth/register") ||
-        path.startsWith("/swagger-ui") ||
-        path.startsWith("/v3/api-docs");
+    for (String publicPathPrefix : PUBLIC_PATH_PREFIXES) {
+      if (path.startsWith(publicPathPrefix)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }

@@ -13,7 +13,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * REST controller exposing authentication endpoints for the TechForum API.
@@ -23,9 +27,26 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "Authentication", description = "Endpoints for user registration, login, and logout")
 @RestController
-@RequestMapping("/auth")
+@RequestMapping(AuthController.AUTH_PATH)
 @RequiredArgsConstructor
 public class AuthController {
+
+  static final String AUTH_PATH = "/auth";
+
+  private static final String LOGIN_PATH = "/login";
+  private static final String REGISTER_PATH = "/register";
+  private static final String LOGOUT_PATH = "/logout";
+
+  private static final String AUTHORIZATION_HEADER = "Authorization";
+  private static final String BEARER_AUTHENTICATION_SCHEME = "Bearer Authentication";
+
+  private static final String LOGIN_SUCCESS_DESCRIPTION = "Login successful";
+  private static final String ACCOUNT_CREATED_DESCRIPTION = "Account created successfully";
+  private static final String VALIDATION_FAILED_DESCRIPTION = "Validation failed";
+  private static final String INVALID_CREDENTIALS_DESCRIPTION = "Invalid credentials";
+  private static final String USER_ALREADY_EXISTS_DESCRIPTION =
+      "Validation failed or user already exists";
+  private static final String TOKEN_REVOKED_DESCRIPTION = "Token revoked or already expired";
 
   private final AuthService authService;
 
@@ -41,13 +62,13 @@ public class AuthController {
       summary = "Login",
       description = "Authenticate with username/email and password. Returns a JWT access token.",
       responses = {
-        @ApiResponse(responseCode = "200", description = "Login successful"),
-        @ApiResponse(responseCode = "401", description = "Invalid credentials"),
-        @ApiResponse(responseCode = "400", description = "Validation failed")
+        @ApiResponse(responseCode = "200", description = LOGIN_SUCCESS_DESCRIPTION),
+        @ApiResponse(responseCode = "401", description = INVALID_CREDENTIALS_DESCRIPTION),
+        @ApiResponse(responseCode = "400", description = VALIDATION_FAILED_DESCRIPTION)
       })
-  @PostMapping("/login")
+  @PostMapping(LOGIN_PATH)
   public ResponseEntity<AuthResponseDTO> login(@Valid @RequestBody LoginRequestDTO request) {
-    return ResponseEntity.ok(authService.login(request));
+    return ok(authService.login(request));
   }
 
   /**
@@ -64,12 +85,12 @@ public class AuthController {
       summary = "Register",
       description = "Create a new user account. Returns a JWT access token on success.",
       responses = {
-        @ApiResponse(responseCode = "201", description = "Account created successfully"),
-        @ApiResponse(responseCode = "400", description = "Validation failed or user already exists")
+        @ApiResponse(responseCode = "201", description = ACCOUNT_CREATED_DESCRIPTION),
+        @ApiResponse(responseCode = "400", description = USER_ALREADY_EXISTS_DESCRIPTION)
       })
-  @PostMapping("/register")
+  @PostMapping(REGISTER_PATH)
   public ResponseEntity<AuthResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+    return created(authService.register(request));
   }
 
   /**
@@ -79,20 +100,31 @@ public class AuthController {
    * removes it automatically via TTL. Subsequent requests using the same token will be rejected by
    * {@link JwtAuthFilter}.
    *
-   * @param authorizationHeader The logout header containing the access token to revoke.
+   * @param bearerTokenHeader The authorization header containing the access token to revoke.
    * @return 204 No Content on success. Also returns 204 if the token is already expired or invalid
    *     (logout is treated as idempotent).
    */
   @Operation(
       summary = "Logout",
       description = "Revoke a JWT token by blacklisting it in Redis until its natural expiry.",
-      responses = {
-        @ApiResponse(responseCode = "204", description = "Token revoked or already expired")
-      })
-  @SecurityRequirement(name = "Bearer Authentication")
-  @PostMapping("/logout")
-  public ResponseEntity<Void> logout(@Parameter(hidden = true) @RequestHeader("Authorization") String authorizationHeader) {
-    authService.logout(authorizationHeader);
+      responses = {@ApiResponse(responseCode = "204", description = TOKEN_REVOKED_DESCRIPTION)})
+  @SecurityRequirement(name = BEARER_AUTHENTICATION_SCHEME)
+  @PostMapping(LOGOUT_PATH)
+  public ResponseEntity<Void> logout(
+      @Parameter(hidden = true) @RequestHeader(AUTHORIZATION_HEADER) String bearerTokenHeader) {
+    authService.logout(bearerTokenHeader);
+    return noContent();
+  }
+
+  private ResponseEntity<AuthResponseDTO> ok(AuthResponseDTO response) {
+    return ResponseEntity.ok(response);
+  }
+
+  private ResponseEntity<AuthResponseDTO> created(AuthResponseDTO response) {
+    return ResponseEntity.status(HttpStatus.CREATED).body(response);
+  }
+
+  private ResponseEntity<Void> noContent() {
     return ResponseEntity.noContent().build();
   }
 }

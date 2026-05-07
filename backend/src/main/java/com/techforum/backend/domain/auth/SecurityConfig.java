@@ -1,8 +1,7 @@
 package com.techforum.backend.domain.auth;
 
-import java.util.List;
-
 import com.techforum.backend.domain.auth.filter.JwtAuthFilter;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -71,8 +70,10 @@ public class SecurityConfig {
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/auth/login", "/auth/register").permitAll()
-                    .requestMatchers("/auth/logout").authenticated()
+                auth.requestMatchers("/auth/login", "/auth/register")
+                    .permitAll()
+                    .requestMatchers("/auth/logout")
+                    .authenticated()
                     .requestMatchers(ACTUATOR_WHITELIST)
                     .permitAll()
                     .requestMatchers(SWAGGER_WHITELIST)

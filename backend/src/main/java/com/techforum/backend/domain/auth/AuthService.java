@@ -47,8 +47,8 @@ public class AuthService {
    * @throws ConflictException if the username or email already exists.
    */
   public AuthResponseDTO register(RegisterRequestDTO request) {
-    String normalizedUsername = request.getUsername().toLowerCase();
-    String normalizedEmail = request.getEmail().toLowerCase();
+    String normalizedUsername = request.username().toLowerCase();
+    String normalizedEmail = request.email().toLowerCase();
 
     if (userRepository.existsByUsernameOrEmail(normalizedUsername, normalizedEmail)
         || userRepository.existsByUsernameOrEmail(normalizedEmail, normalizedUsername)) {
@@ -57,9 +57,9 @@ public class AuthService {
 
     User newUser =
         User.builder()
-            .username(request.getUsername())
-            .email(request.getEmail())
-            .password(passwordEncoder.encode(request.getPassword()))
+            .username(request.username())
+            .email(request.email())
+            .password(passwordEncoder.encode(request.password()))
             .createdAt(Instant.now())
             .isSuspended(false)
             .role(RoleType.USER)
@@ -94,9 +94,9 @@ public class AuthService {
    * @throws org.springframework.security.core.AuthenticationException if authentication fails.
    */
   public AuthResponseDTO login(LoginRequestDTO request) {
-    Authentication authentication = authenticationManager.authenticate(
-        new UsernamePasswordAuthenticationToken(request.getIdentifier(), request.getPassword())
-    );
+    Authentication authentication =
+        authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(request.identifier(), request.password()));
 
     UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
 
@@ -148,6 +148,5 @@ public class AuthService {
         throw new InfrastructureException("Logout service is temporarily unavailable.", e);
       }
     }
-
   }
 }
