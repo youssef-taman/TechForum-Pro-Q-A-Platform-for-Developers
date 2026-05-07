@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Formula;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -63,6 +64,6 @@ public class Thread extends BaseEntity {
     @Builder.Default
     private Set<Comment> comments = new HashSet<>();
 
-    @OneToOne(mappedBy = "thread", fetch = FetchType.LAZY)
-    private ThreadEmbedding threadEmbedding;
+    @Formula("(SELECT COUNT(c.id) FROM Comments c WHERE c.thread_id = id)")
+    private int numberComments;
 }
