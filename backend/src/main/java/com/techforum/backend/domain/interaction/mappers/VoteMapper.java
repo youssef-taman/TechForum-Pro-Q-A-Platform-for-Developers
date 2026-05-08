@@ -8,6 +8,6 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "spring")
 public interface VoteMapper {
 
-    @Mapping(source = "comment.id", target = "commentId")
-    VoteDTO toDTO (Vote vote);
+  @Mapping(source = "comment.id", target = "commentId")
+  VoteDTO toDTO(Vote vote);
 }

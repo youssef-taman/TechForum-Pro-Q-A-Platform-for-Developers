@@ -1,6 +1,7 @@
 package com.techforum.backend.domain.thread;
 
-import com.techforum.backend.domain.tag.Tag;
+import java.util.Collection;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -9,52 +10,51 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.Collection;
-import java.util.Set;
-import java.util.UUID;
-
 @Repository
 public interface ThreadRepository extends JpaRepository<Thread, UUID> {
 
-    Page<Thread> findByAuthor_Id(UUID authorId, Pageable pageable);
+  Page<Thread> findByAuthor_Id(UUID authorId, Pageable pageable);
 
-    @Query(value = """
+  @Query(
+      value =
+          """
             SELECT th FROM Thread th
             JOIN FETCH th.author
             WHERE LOWER(th.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
                OR LOWER(th.body) LIKE LOWER(CONCAT('%', :keyword, '%'))
             """,
-            countQuery = """
+      countQuery =
+          """
             SELECT count(th) FROM Thread th
             WHERE LOWER(th.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
                OR LOWER(th.body) LIKE LOWER(CONCAT('%', :keyword, '%'))
             """)
-    Page<Thread> findByTitleOrBody(@Param("keyword") String keyword, Pageable pageable);
+  Page<Thread> findByTitleOrBody(@Param("keyword") String keyword, Pageable pageable);
 
-
-    @Query(value = """
+  @Query(
+      value =
+          """
               SELECT th FROM Thread th
               JOIN FETCH th.author
               """,
-            countQuery = "SELECT count(th) FROM Thread th")
-    Page<Thread> retrieveAllWithAuthor(Pageable pageable);
+      countQuery = "SELECT count(th) FROM Thread th")
+  Page<Thread> retrieveAllWithAuthor(Pageable pageable);
 
+  @EntityGraph(attributePaths = {"author"})
+  Page<Thread> findByTags_IdIn(Collection<UUID> tagIds, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"author"})
-    Page<Thread> findByTags_IdIn(Collection<UUID> tagIds, Pageable pageable);
-
-
-    @Query("""
+  @Query(
+      """
             SELECT e.embedding
             FROM ThreadEmbedding e
             WHERE e.thread.id = :thread_id
     """)
-    float[] getThreadEmbedding(@Param("thread_id") UUID threadId);
+  float[] getThreadEmbedding(@Param("thread_id") UUID threadId);
 
-
-    @Query("""
+  @Query(
+      """
         SELECT e
         FROM ThreadEmbedding e
     """)
-    Page<ThreadEmbedding> getAllThreadEmbeddings(Pageable pageable);
+  Page<ThreadEmbedding> getAllThreadEmbeddings(Pageable pageable);
 }

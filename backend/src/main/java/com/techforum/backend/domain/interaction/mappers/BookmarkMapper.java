@@ -8,7 +8,7 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "spring")
 public interface BookmarkMapper {
 
-    @Mapping(source = "thread.title", target = "threadTitle")
-    @Mapping(source = "thread.id", target = "threadId")
-    BookmarkDTO toDto(Bookmark bookmark);
+  @Mapping(source = "thread.title", target = "threadTitle")
+  @Mapping(source = "thread.id", target = "threadId")
+  BookmarkDTO toDTO(Bookmark bookmark);
 }
