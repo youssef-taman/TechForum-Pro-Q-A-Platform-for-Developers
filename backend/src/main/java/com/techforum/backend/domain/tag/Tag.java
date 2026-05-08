@@ -15,9 +15,8 @@ import lombok.*;
 @Builder
 public class Tag extends BaseEntity {
 
-    @Column(name = "tag_name", length = 30, nullable = false, unique = true)
-    @NotBlank
-    @Size(max = 30)
-    private String name;
-
+  @Column(name = "tag_name", length = 30, nullable = false, unique = true)
+  @NotBlank
+  @Size(max = 30)
+  private String name;
 }

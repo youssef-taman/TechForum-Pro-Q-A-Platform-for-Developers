@@ -16,13 +16,13 @@ import org.hibernate.type.SqlTypes;
 @Builder
 public class ThreadEmbedding extends BaseEntity {
 
-    @MapsId
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "thread_id")
-    private Thread thread;
+  @MapsId
+  @OneToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "thread_id")
+  private Thread thread;
 
-    @Column(columnDefinition = "vector(768)", nullable = false, updatable = true)
-    @JdbcTypeCode(SqlTypes.VECTOR)
-    @NotNull
-    private float[] embedding;
+  @Column(columnDefinition = "vector(768)", nullable = false, updatable = true)
+  @JdbcTypeCode(SqlTypes.VECTOR)
+  @NotNull
+  private float[] embedding;
 }

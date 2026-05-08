@@ -1,4 +1,3 @@
 package com.techforum.backend.domain.thread;
 
-public class ThreadController {
-}
+public class ThreadController {}

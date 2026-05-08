@@ -1,4 +1,3 @@
 package com.techforum.backend.domain.interaction;
 
-public class InteractionController {
-}
+public class InteractionController {}

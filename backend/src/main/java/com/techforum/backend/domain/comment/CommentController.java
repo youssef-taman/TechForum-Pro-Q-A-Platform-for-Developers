@@ -1,4 +1,3 @@
 package com.techforum.backend.domain.comment;
 
-public class CommentController {
-}
+public class CommentController {}

@@ -1,4 +1,3 @@
 package com.techforum.backend.domain.tag;
 
-public class TagService {
-}
+public class TagService {}
