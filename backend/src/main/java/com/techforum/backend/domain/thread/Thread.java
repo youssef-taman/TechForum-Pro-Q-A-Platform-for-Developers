@@ -1,6 +1,7 @@
 package com.techforum.backend.domain.thread;
 
 import com.techforum.backend.common.persistence.BaseEntity;
+import com.techforum.backend.domain.comment.Comment;
 import com.techforum.backend.domain.tag.Tag;
 import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.user.User;
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Formula;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -57,4 +59,11 @@ public class Thread extends BaseEntity {
     )
     @Builder.Default
     private Set<Tag> tags = new HashSet<>();
+
+    @OneToMany(mappedBy = "thread", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private Set<Comment> comments = new HashSet<>();
+
+    @Formula("(SELECT COUNT(c.id) FROM Comments c WHERE c.thread_id = id)")
+    private int numberComments;
 }
