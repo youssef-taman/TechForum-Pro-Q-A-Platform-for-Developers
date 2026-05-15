@@ -2,6 +2,7 @@ package com.techforum.backend.domain.thread;
 
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -17,6 +18,9 @@ import org.springframework.stereotype.Repository;
 public interface ThreadRepository extends JpaRepository<Thread, UUID> {
 
   Page<Thread> findByAuthor_Id(UUID authorId, Pageable pageable);
+
+  @EntityGraph(attributePaths = {"author", "tags"})
+  Optional<Thread> findExpandedThreadById(UUID threadId);
 
   @Query(
       value =

@@ -19,4 +19,15 @@ public class ThreadExceptionHandler {
 
     return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
   }
+
+  @ExceptionHandler(ThreadNotFoundException.class)
+  public ResponseEntity<Map<String, Object>> handleThreadNotFound(
+      ThreadNotFoundException exception) {
+    Map<String, Object> body = new HashMap<>();
+    body.put("message", exception.getMessage());
+    body.put("threadId", exception.getThreadId());
+    body.put("author", exception.getAuthorUsername());
+
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+  }
 }

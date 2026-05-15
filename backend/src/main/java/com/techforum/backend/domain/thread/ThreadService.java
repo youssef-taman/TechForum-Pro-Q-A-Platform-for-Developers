@@ -1,6 +1,7 @@
 package com.techforum.backend.domain.thread;
 
 import com.techforum.backend.common.exception.thread.DuplicateThreadException;
+import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.tag.Tag;
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
@@ -10,20 +11,22 @@ import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.thread.mappers.ThreadMapper;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
-import jakarta.transaction.Transactional;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class ThreadService {
 
-  private final UserRepository userRepository;
   private final ThreadRepository threadRepository;
+  private final UserRepository userRepository;
   private final ThreadMapper threadMapper;
   private final double THREAD_DUPLICATION_SIMILARITY_THRESHOLD = 0.95;
 
@@ -99,7 +102,7 @@ public class ThreadService {
     User author =
         userRepository
             .findByIdentifier(currentUserIdentifier)
-            .orElseThrow(UserNotFoundException::new);
+            .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
 
     float[] embedding = getThreadEmbedding(threadCreateDTO);
 
@@ -112,19 +115,20 @@ public class ThreadService {
     return threadMapper.toDTO(thread);
   }
 
-  @Transactional
-  public ThreadDTO forceThreadCreation(
-      ThreadCreateDTO threadCreateDTO, Authentication authentication) {
+  @Transactional(readOnly = true)
+  public ThreadDTO expandThread(String username, UUID threadId) {
 
-    String currentUserIdentifier = authentication.getName();
-    User author =
-        userRepository
-            .findByIdentifier(currentUserIdentifier)
-            .orElseThrow(UserNotFoundException::new);
+    Optional<Thread> thread = threadRepository.findExpandedThreadById(threadId);
+    if (thread.isEmpty()) {
+      throw new ThreadNotFoundException(threadId, username);
+    }
 
-    float[] embedding = getThreadEmbedding(threadCreateDTO);
-    Thread thread = saveThread(threadCreateDTO, author, embedding);
+    Thread expandedThread = thread.get();
 
-    return threadMapper.toDTO(thread);
+    if (!expandedThread.getAuthor().getUsername().equals(username)) {
+      throw new ThreadNotFoundException(threadId, username);
+    }
+
+    return threadMapper.toDTO(expandedThread);
   }
 }
