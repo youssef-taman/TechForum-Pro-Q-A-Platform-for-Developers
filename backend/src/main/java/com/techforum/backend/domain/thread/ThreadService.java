@@ -7,6 +7,7 @@ import com.techforum.backend.domain.tag.Tag;
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadCreateDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadDTO;
+import com.techforum.backend.domain.thread.dtos.ThreadUpdateDTO;
 import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.thread.mappers.ThreadMapper;
 import com.techforum.backend.domain.user.User;
@@ -155,5 +156,24 @@ public class ThreadService {
     }
 
     threadRepository.delete(thread);
+  }
+
+  @Transactional
+  public ThreadDTO updateThread(
+      UUID threadId, ThreadUpdateDTO threadUpdateDTO, Authentication authentication) {
+
+    Thread thread =
+        threadRepository
+            .findById(threadId)
+            .orElseThrow(() -> new ThreadNotFoundException(threadId, authentication.getName()));
+
+    if (!thread.getAuthor().getUsername().equals(authentication.getName())) {
+      throw new AccessDeniedException("You don't have permission to modify this thread!");
+    }
+
+    threadMapper.updateThreadFromDto(threadUpdateDTO, thread);
+    threadRepository.save(thread);
+
+    return threadMapper.toDTO(thread);
   }
 }

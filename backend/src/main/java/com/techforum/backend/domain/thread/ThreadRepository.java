@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -16,6 +17,9 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ThreadRepository extends JpaRepository<Thread, UUID> {
+
+  @EntityGraph(attributePaths = {"author"})
+  Optional<Thread> findById(@NonNull UUID threadId);
 
   Page<Thread> findByAuthor_Id(UUID authorId, Pageable pageable);
 
