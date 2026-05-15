@@ -34,4 +34,11 @@ public class ThreadController {
     ThreadDTO expandedThread = threadService.expandThread(username, threadId);
     return ResponseEntity.ok(expandedThread);
   }
+
+  @DeleteMapping("/{threadId}")
+  public ResponseEntity<Void> deleteThread(
+      @PathVariable UUID threadId, Authentication authentication) {
+    threadService.deleteThread(threadId, authentication);
+    return ResponseEntity.noContent().build();
+  }
 }

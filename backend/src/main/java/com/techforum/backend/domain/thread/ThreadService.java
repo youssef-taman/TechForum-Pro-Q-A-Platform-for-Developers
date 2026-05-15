@@ -15,8 +15,11 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.jspecify.annotations.NonNull;
+
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -130,5 +133,27 @@ public class ThreadService {
     }
 
     return threadMapper.toDTO(expandedThread);
+  }
+
+  @Transactional
+  public void deleteThread(UUID threadId, Authentication authentication) {
+
+    Thread thread =
+        threadRepository
+            .findById(threadId)
+            .orElseThrow(() -> new ThreadNotFoundException(threadId, authentication.getName()));
+
+    boolean isAdminOrMod =
+        authentication.getAuthorities().stream()
+            .anyMatch(
+                a ->
+                    a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_MODERATOR"));
+
+    if (!isAdminOrMod && !thread.getAuthor().getUsername().equals(authentication.getName())) {
+      throw new AccessDeniedException("You don't have permission to delete this thread!");
+    }
+
+    threadRepository.delete(thread);
   }
 }
