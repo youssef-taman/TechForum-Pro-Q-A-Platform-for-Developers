@@ -1,7 +1,7 @@
 package com.techforum.backend.domain.thread;
 
+import com.querydsl.core.types.Predicate;
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
-import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -12,16 +12,22 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.querydsl.QuerydslPredicateExecutor;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface ThreadRepository extends JpaRepository<Thread, UUID> {
+public interface ThreadRepository
+    extends JpaRepository<Thread, UUID>, QuerydslPredicateExecutor<Thread> {
 
+  @Override
   @EntityGraph(attributePaths = {"author"})
   Optional<Thread> findById(@NonNull UUID threadId);
 
-  Page<Thread> findByAuthor_Id(UUID authorId, Pageable pageable);
+  @Override
+  @NonNull
+  @EntityGraph(attributePaths = {"author"})
+  Page<Thread> findAll(Predicate predicate, Pageable pageable);
 
   @EntityGraph(attributePaths = {"author", "tags"})
   Optional<Thread> findExpandedThreadById(UUID threadId);
@@ -41,18 +47,6 @@ public interface ThreadRepository extends JpaRepository<Thread, UUID> {
                OR LOWER(th.body) LIKE LOWER(CONCAT('%', :keyword, '%'))
             """)
   Page<Thread> findByTitleOrBody(@Param("keyword") String keyword, Pageable pageable);
-
-  @Query(
-      value =
-          """
-              SELECT th FROM Thread th
-              JOIN FETCH th.author
-              """,
-      countQuery = "SELECT count(th) FROM Thread th")
-  Page<Thread> retrieveAllWithAuthor(Pageable pageable);
-
-  @EntityGraph(attributePaths = {"author"})
-  Page<Thread> findByTags_IdIn(Collection<UUID> tagIds, Pageable pageable);
 
   @Query(
       """

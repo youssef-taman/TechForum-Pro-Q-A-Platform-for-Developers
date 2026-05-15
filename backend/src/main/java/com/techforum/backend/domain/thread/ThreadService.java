@@ -1,9 +1,11 @@
 package com.techforum.backend.domain.thread;
 
+import com.querydsl.core.BooleanBuilder;
 import com.techforum.backend.common.exception.thread.DuplicateThreadException;
 import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.tag.Tag;
+import com.techforum.backend.domain.tag.mappers.TagMapper;
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadCreateDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadDTO;
@@ -16,10 +18,12 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -33,6 +37,7 @@ public class ThreadService {
   private final UserRepository userRepository;
   private final ThreadMapper threadMapper;
   private final double THREAD_DUPLICATION_SIMILARITY_THRESHOLD = 0.95;
+  private final TagMapper tagMapper;
 
   private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
     /*
@@ -175,5 +180,40 @@ public class ThreadService {
     threadRepository.save(thread);
 
     return threadMapper.toDTO(thread);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<ThreadDTO> getUserThreads(
+      String username, int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
+
+    Optional<User> user = userRepository.findByIdentifier(username);
+    if (user.isEmpty()) {
+      throw new UserNotFoundException(username);
+    }
+
+    sortBy = (sortBy != null) ? sortBy.toLowerCase() : "latest";
+    Sort sort =
+        switch (sortBy) {
+          case "top" -> Sort.by("numberComments").descending();
+          case "older" -> Sort.by("createdAt").ascending();
+          default -> Sort.by("createdAt").descending();
+        };
+
+    QThread thread = QThread.thread;
+    BooleanBuilder filterBuilder = new BooleanBuilder();
+
+    filterBuilder.and(thread.author.id.eq(user.get().getId()));
+
+    if (status != null) {
+      filterBuilder.and(thread.status.eq(status));
+    }
+
+    if (tags != null && !tags.isEmpty()) {
+      filterBuilder.and(thread.tags.any().name.in(tags));
+    }
+
+    Pageable pageable = PageRequest.of(page, size, sort);
+    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
+    return threadPage.map(threadMapper::toDTO);
   }
 }
