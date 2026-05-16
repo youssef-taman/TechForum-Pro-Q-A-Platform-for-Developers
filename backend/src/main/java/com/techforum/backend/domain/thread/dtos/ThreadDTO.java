@@ -8,7 +8,6 @@ import java.util.UUID;
 
 public record ThreadDTO(
     UUID id,
-    UUID authorId,
     String authorName,
     String title,
     String body,
