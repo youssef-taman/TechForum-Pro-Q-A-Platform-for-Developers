@@ -21,7 +21,7 @@ public class ThreadController {
 
   private final ThreadService threadService;
 
-  @PostMapping("/")
+  @PostMapping
   public ResponseEntity<ThreadDTO> createThread(
       @Valid @RequestBody ThreadCreateDTO threadCreateDTO,
       @RequestParam(defaultValue = "false") boolean ignoreDuplicates,
@@ -65,6 +65,17 @@ public class ThreadController {
       @RequestParam(required = false) Set<String> tags) {
     Page<ThreadDTO> userThreads =
         threadService.getUserThreads(username, page, size, sortBy, status, tags);
+    return ResponseEntity.ok(userThreads);
+  }
+
+  @GetMapping
+  public ResponseEntity<Page<ThreadDTO>> getTimeline(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "latest", required = false) String sortBy,
+      @RequestParam(required = false) ThreadStatus status,
+      @RequestParam(required = false) Set<String> tags) {
+    Page<ThreadDTO> userThreads = threadService.getTimeline(page, size, sortBy, status, tags);
     return ResponseEntity.ok(userThreads);
   }
 }

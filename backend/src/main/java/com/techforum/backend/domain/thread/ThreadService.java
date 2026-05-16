@@ -182,13 +182,22 @@ public class ThreadService {
     return threadMapper.toDTO(thread);
   }
 
-  @Transactional(readOnly = true)
-  public Page<ThreadDTO> getUserThreads(
-      String username, int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
+  @NonNull
+  private Page<ThreadDTO> getThreadDTOS(
+      int page,
+      int size,
+      ThreadStatus status,
+      Set<String> tags,
+      String sortBy,
+      QThread thread,
+      BooleanBuilder filterBuilder) {
 
-    Optional<User> user = userRepository.findByIdentifier(username);
-    if (user.isEmpty()) {
-      throw new UserNotFoundException(username);
+    if (status != null) {
+      filterBuilder.and(thread.status.eq(status));
+    }
+
+    if (tags != null && !tags.isEmpty()) {
+      filterBuilder.and(thread.tags.any().name.in(tags));
     }
 
     sortBy = (sortBy != null) ? sortBy.toLowerCase() : "latest";
@@ -199,21 +208,35 @@ public class ThreadService {
           default -> Sort.by("createdAt").descending();
         };
 
+    Pageable pageable = PageRequest.of(page, size, sort);
+    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
+    return threadPage.map(threadMapper::toDTO);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<ThreadDTO> getUserThreads(
+      String username, int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
+
+    Optional<User> user = userRepository.findByIdentifier(username);
+    if (user.isEmpty()) {
+      throw new UserNotFoundException(username);
+    }
+
     QThread thread = QThread.thread;
     BooleanBuilder filterBuilder = new BooleanBuilder();
 
     filterBuilder.and(thread.author.id.eq(user.get().getId()));
 
-    if (status != null) {
-      filterBuilder.and(thread.status.eq(status));
-    }
+    return getThreadDTOS(page, size, status, tags, sortBy, thread, filterBuilder);
+  }
 
-    if (tags != null && !tags.isEmpty()) {
-      filterBuilder.and(thread.tags.any().name.in(tags));
-    }
+  @Transactional(readOnly = true)
+  public Page<ThreadDTO> getTimeline(
+      int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
 
-    Pageable pageable = PageRequest.of(page, size, sort);
-    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
-    return threadPage.map(threadMapper::toDTO);
+    QThread thread = QThread.thread;
+    BooleanBuilder filterBuilder = new BooleanBuilder();
+
+    return getThreadDTOS(page, size, status, tags, sortBy, thread, filterBuilder);
   }
 }
