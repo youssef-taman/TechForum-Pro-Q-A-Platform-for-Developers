@@ -1,5 +1,6 @@
 package com.techforum.backend.domain.interaction;
 
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,4 +27,8 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, UUID> {
         WHERE b.user.id = :user_id
         """)
   Page<Bookmark> findAllUserBookmarks(@Param("user_id") UUID userId, Pageable pageable);
+
+  Optional<Bookmark> findByUserIdAndThreadId(UUID userId, UUID threadId);
+
+  boolean existsByUserIdAndThreadId(UUID userId, UUID threadId);
 }
