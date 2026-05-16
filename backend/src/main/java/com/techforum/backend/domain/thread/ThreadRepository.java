@@ -1,11 +1,14 @@
 package com.techforum.backend.domain.thread;
 
+import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
 import java.util.Collection;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -52,9 +55,31 @@ public interface ThreadRepository extends JpaRepository<Thread, UUID> {
   float[] getThreadEmbedding(@Param("thread_id") UUID threadId);
 
   @Query(
-      """
-        SELECT e
-        FROM ThreadEmbedding e
-    """)
-  Page<ThreadEmbedding> getAllThreadEmbeddings(Pageable pageable);
+      value =
+          """
+        SELECT e.thread_id AS threadId,
+               u.username AS authorUsername,
+               th.title AS title,
+               ((1 - (e.embedding <=> CAST(:embedding AS VECTOR)))) AS cosineSimilarityScore,
+               th.created_at AS createdAt
+        FROM thread_embeddings e
+        JOIN Threads th ON e.thread_id = th.id
+        JOIN Users u ON u.id = th.user_id
+        WHERE (1 - (e.embedding <=> CAST(:embedding AS VECTOR))) >= :threshold
+        ORDER BY e.embedding <=> CAST(:embedding AS VECTOR) ASC
+        LIMIT 3
+        """,
+      nativeQuery = true)
+  Set<DuplicateThreadDTO> findDuplicateWithThreshold(
+      @Param("embedding") float[] embedding, @Param("threshold") double threshold);
+
+  @Modifying
+  @Query(
+      value =
+          """
+          INSERT INTO thread_embeddings (thread_id, embedding)
+          VALUES (:#{#thread_embedding.thread.id}, CAST(:#{#thread_embedding.embedding} AS VECTOR))
+    """,
+      nativeQuery = true)
+  void saveThreadEmbedding(@Param("thread_embedding") ThreadEmbedding threadEmbedding);
 }
