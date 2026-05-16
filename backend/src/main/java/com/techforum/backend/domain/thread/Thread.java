@@ -68,12 +68,4 @@ public class Thread extends BaseEntity {
 
   @Formula("(SELECT COUNT(c.id) FROM Comments c WHERE c.thread_id = id)")
   private int numberComments;
-
-  public void addTags(Set<Tag> newTags) {
-    this.tags.addAll(newTags);
-  }
-
-  public void removeTags(Set<Tag> removedTags) {
-    this.tags.removeAll(removedTags);
-  }
 }
