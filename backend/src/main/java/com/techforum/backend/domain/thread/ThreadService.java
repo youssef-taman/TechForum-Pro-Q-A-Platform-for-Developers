@@ -1,31 +1,43 @@
 package com.techforum.backend.domain.thread;
 
+import com.querydsl.core.BooleanBuilder;
 import com.techforum.backend.common.exception.thread.DuplicateThreadException;
+import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.tag.Tag;
+import com.techforum.backend.domain.tag.mappers.TagMapper;
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadCreateDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadDTO;
+import com.techforum.backend.domain.thread.dtos.ThreadUpdateDTO;
 import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.thread.mappers.ThreadMapper;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
-import jakarta.transaction.Transactional;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.jspecify.annotations.NonNull;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class ThreadService {
 
-  private final UserRepository userRepository;
   private final ThreadRepository threadRepository;
+  private final UserRepository userRepository;
   private final ThreadMapper threadMapper;
   private final double THREAD_DUPLICATION_SIMILARITY_THRESHOLD = 0.95;
+  private final TagMapper tagMapper;
 
   private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
     /*
@@ -99,7 +111,7 @@ public class ThreadService {
     User author =
         userRepository
             .findByIdentifier(currentUserIdentifier)
-            .orElseThrow(UserNotFoundException::new);
+            .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
 
     float[] embedding = getThreadEmbedding(threadCreateDTO);
 
@@ -112,19 +124,119 @@ public class ThreadService {
     return threadMapper.toDTO(thread);
   }
 
+  @Transactional(readOnly = true)
+  public ThreadDTO expandThread(String username, UUID threadId) {
+
+    Optional<Thread> thread = threadRepository.findExpandedThreadById(threadId);
+    if (thread.isEmpty()) {
+      throw new ThreadNotFoundException(threadId, username);
+    }
+
+    Thread expandedThread = thread.get();
+
+    if (!expandedThread.getAuthor().getUsername().equals(username)) {
+      throw new ThreadNotFoundException(threadId, username);
+    }
+
+    return threadMapper.toDTO(expandedThread);
+  }
+
   @Transactional
-  public ThreadDTO forceThreadCreation(
-      ThreadCreateDTO threadCreateDTO, Authentication authentication) {
+  public void deleteThread(UUID threadId, Authentication authentication) {
 
-    String currentUserIdentifier = authentication.getName();
-    User author =
-        userRepository
-            .findByIdentifier(currentUserIdentifier)
-            .orElseThrow(UserNotFoundException::new);
+    Thread thread =
+        threadRepository
+            .findById(threadId)
+            .orElseThrow(() -> new ThreadNotFoundException(threadId, authentication.getName()));
 
-    float[] embedding = getThreadEmbedding(threadCreateDTO);
-    Thread thread = saveThread(threadCreateDTO, author, embedding);
+    boolean isAdminOrMod =
+        authentication.getAuthorities().stream()
+            .anyMatch(
+                a ->
+                    a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_MODERATOR"));
+
+    if (!isAdminOrMod && !thread.getAuthor().getUsername().equals(authentication.getName())) {
+      throw new AccessDeniedException("You don't have permission to delete this thread!");
+    }
+
+    threadRepository.delete(thread);
+  }
+
+  @Transactional
+  public ThreadDTO updateThread(
+      UUID threadId, ThreadUpdateDTO threadUpdateDTO, Authentication authentication) {
+
+    Thread thread =
+        threadRepository
+            .findById(threadId)
+            .orElseThrow(() -> new ThreadNotFoundException(threadId, authentication.getName()));
+
+    if (!thread.getAuthor().getUsername().equals(authentication.getName())) {
+      throw new AccessDeniedException("You don't have permission to modify this thread!");
+    }
+
+    threadMapper.updateThreadFromDto(threadUpdateDTO, thread);
+    threadRepository.save(thread);
 
     return threadMapper.toDTO(thread);
+  }
+
+  @NonNull
+  private Page<ThreadDTO> getThreadDTOS(
+      int page,
+      int size,
+      ThreadStatus status,
+      Set<String> tags,
+      String sortBy,
+      QThread thread,
+      BooleanBuilder filterBuilder) {
+
+    if (status != null) {
+      filterBuilder.and(thread.status.eq(status));
+    }
+
+    if (tags != null && !tags.isEmpty()) {
+      filterBuilder.and(thread.tags.any().name.in(tags));
+    }
+
+    sortBy = (sortBy != null) ? sortBy.toLowerCase() : "latest";
+    Sort sort =
+        switch (sortBy) {
+          case "top" -> Sort.by("numberComments").descending();
+          case "older" -> Sort.by("createdAt").ascending();
+          default -> Sort.by("createdAt").descending();
+        };
+
+    Pageable pageable = PageRequest.of(page, size, sort);
+    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
+    return threadPage.map(threadMapper::toDTO);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<ThreadDTO> getUserThreads(
+      String username, int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
+
+    Optional<User> user = userRepository.findByIdentifier(username);
+    if (user.isEmpty()) {
+      throw new UserNotFoundException(username);
+    }
+
+    QThread thread = QThread.thread;
+    BooleanBuilder filterBuilder = new BooleanBuilder();
+
+    filterBuilder.and(thread.author.id.eq(user.get().getId()));
+
+    return getThreadDTOS(page, size, status, tags, sortBy, thread, filterBuilder);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<ThreadDTO> getTimeline(
+      int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
+
+    QThread thread = QThread.thread;
+    BooleanBuilder filterBuilder = new BooleanBuilder();
+
+    return getThreadDTOS(page, size, status, tags, sortBy, thread, filterBuilder);
   }
 }
