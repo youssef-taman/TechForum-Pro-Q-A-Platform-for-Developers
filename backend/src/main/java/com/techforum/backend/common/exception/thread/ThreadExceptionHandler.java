@@ -25,8 +25,14 @@ public class ThreadExceptionHandler {
       ThreadNotFoundException exception) {
     Map<String, Object> body = new HashMap<>();
     body.put("message", exception.getMessage());
-    body.put("threadId", exception.getThreadId());
-    body.put("author", exception.getAuthorUsername());
+
+    if (exception.getThreadId() != null) {
+      body.put("threadId", exception.getThreadId());
+    }
+
+    if (exception.getAuthorUsername != null) {
+      body.put("author", exception.getAuthorUsername());
+    }
 
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
   }

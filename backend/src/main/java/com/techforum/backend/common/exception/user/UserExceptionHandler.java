@@ -16,7 +16,10 @@ public class UserExceptionHandler {
     body.put("message", exception.getMessage());
     body.put("status", HttpStatus.NOT_FOUND.value());
     body.put("error", "Not Found");
-    body.put("username", exception.getUsername());
+
+    if (exception.getUsername() != null) {
+      body.put("username", exception.getUsername());
+    }
 
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
   }

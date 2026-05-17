@@ -10,4 +10,8 @@ public class UserNotFoundException extends UserException {
     super("Current user not found.");
     this.username = username;
   }
+
+  public UserNotFoundException() {
+    super("Current user not found.");
+  }
 }

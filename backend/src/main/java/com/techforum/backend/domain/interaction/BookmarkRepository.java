@@ -1,8 +1,10 @@
 package com.techforum.backend.domain.interaction;
 
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,4 +28,9 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, UUID> {
         WHERE b.user.id = :user_id
         """)
   Page<Bookmark> findAllUserBookmarks(@Param("user_id") UUID userId, Pageable pageable);
+
+  @EntityGraph(attributePaths = {"thread", "user", "thread.author"})
+  Optional<Bookmark> findByUserIdAndThreadId(UUID userId, UUID threadId);
+
+  boolean existsByUserIdAndThreadId(UUID userId, UUID threadId);
 }

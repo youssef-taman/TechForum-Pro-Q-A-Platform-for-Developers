@@ -13,4 +13,8 @@ public class ThreadNotFoundException extends ThreadException {
     this.threadId = threadId;
     this.authorUsername = authorUsername;
   }
+
+  public ThreadNotFoundException() {
+    super("Thread is not found");
+  }
 }
