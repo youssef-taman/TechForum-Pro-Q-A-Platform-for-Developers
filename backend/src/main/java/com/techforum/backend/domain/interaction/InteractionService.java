@@ -8,12 +8,12 @@ import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
 import jakarta.transaction.Transactional;
 import java.util.UUID;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class InteractionService {
   private final BookmarkRepository bookmarkRepository;
   private final UserRepository userRepository;
