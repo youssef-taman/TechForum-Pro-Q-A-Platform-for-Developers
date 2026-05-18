@@ -1,10 +1,4 @@
 spring:
-  application:
-    name: backend
-    security:
-      jwt:
-        secret-key: ${JWT_SECRET_KEY}
-        expiration-time: ${JWT_EXPIRATION_TIME}
   datasource:
     url: jdbc:postgresql://db:5432/${DB_NAME}?currentSchema=techforum
     username: ${DB_USER}
@@ -43,3 +37,9 @@ spring:
 server:
   servlet:
     context-path: /api
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY}
+      expiration-time: ${JWT_EXPIRATION_TIME}
