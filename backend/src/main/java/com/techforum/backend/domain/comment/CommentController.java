@@ -30,4 +30,13 @@ public class CommentController {
     commentService.deleteComment(commentId, authentication);
     return ResponseEntity.noContent().build();
   }
+
+  @PatchMapping("/{commentId}")
+  public ResponseEntity<CommentDTO> updateComment(
+      @PathVariable UUID commentId,
+      @Valid @RequestParam String updatedContent,
+      Authentication authentication) {
+    CommentDTO commentDTO = commentService.updateComment(commentId, updatedContent, authentication);
+    return ResponseEntity.ok(commentDTO);
+  }
 }

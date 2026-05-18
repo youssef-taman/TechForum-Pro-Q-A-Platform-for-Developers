@@ -87,4 +87,28 @@ public class CommentService {
 
     commentRepository.delete(comment);
   }
+
+  @Transactional
+  public CommentDTO updateComment(
+      UUID commentId, @Valid String updatedContent, Authentication authentication) {
+
+    String username = authentication.getName();
+
+    User user =
+        userRepository
+            .findByIdentifier(username)
+            .orElseThrow(() -> new UserNotFoundException(username));
+
+    Comment comment =
+        commentRepository.findById(commentId).orElseThrow(CommentNotFoundException::new);
+
+    if (!comment.getAuthor().getUsername().equals(username)) {
+      throw new AccessDeniedException("You don't have permission to edit this comment!");
+    }
+
+    comment.setContent(updatedContent);
+    commentRepository.save(comment);
+
+    return commentMapper.toDTO(comment);
+  }
 }
