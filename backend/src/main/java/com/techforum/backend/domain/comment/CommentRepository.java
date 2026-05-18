@@ -1,6 +1,8 @@
 package com.techforum.backend.domain.comment;
 
+import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -9,6 +11,10 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface CommentRepository extends JpaRepository<Comment, UUID> {
+
+  @Override
+  @EntityGraph(attributePaths = {"author"})
+  Optional<Comment> findById(@NonNull UUID commentId);
 
   @EntityGraph(attributePaths = {"author"})
   Page<Comment> findByThread_Id(UUID threadId, Pageable pageable);

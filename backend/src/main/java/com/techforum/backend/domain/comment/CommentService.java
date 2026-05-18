@@ -1,3 +1,61 @@
 package com.techforum.backend.domain.comment;
 
-public class CommentService {}
+import com.techforum.backend.common.exception.comment.CommentNotFoundException;
+import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
+import com.techforum.backend.common.exception.user.UserNotFoundException;
+import com.techforum.backend.domain.comment.dtos.AddCommentDTO;
+import com.techforum.backend.domain.comment.dtos.CommentDTO;
+import com.techforum.backend.domain.comment.mappers.CommentMapper;
+import com.techforum.backend.domain.thread.Thread;
+import com.techforum.backend.domain.thread.ThreadRepository;
+import com.techforum.backend.domain.user.User;
+import com.techforum.backend.domain.user.UserRepository;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class CommentService {
+
+  private final CommentRepository commentRepository;
+  private final UserRepository userRepository;
+  private final ThreadRepository threadRepository;
+  private final CommentMapper commentMapper;
+
+  @Transactional
+  public CommentDTO addComment(@Valid AddCommentDTO addCommentDTO, Authentication authentication) {
+
+    String username = authentication.getName();
+    User user =
+        userRepository
+            .findByIdentifier(username)
+            .orElseThrow(() -> new UserNotFoundException(username));
+
+    Thread thread =
+        threadRepository
+            .findById(addCommentDTO.threadId())
+            .orElseThrow(() -> new ThreadNotFoundException(addCommentDTO.threadId(), username));
+
+    Comment parent =
+        addCommentDTO.parentId() == null
+            ? null
+            : commentRepository
+                .findById(addCommentDTO.parentId())
+                .orElseThrow(CommentNotFoundException::new);
+
+    Comment comment =
+        Comment.builder()
+            .author(user)
+            .thread(thread)
+            .parent(parent)
+            .content(addCommentDTO.content())
+            .score(0)
+            .replyCount(0)
+            .build();
+    commentRepository.save(comment);
+    return commentMapper.toDTO(comment);
+  }
+}
