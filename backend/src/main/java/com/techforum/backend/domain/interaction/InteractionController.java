@@ -1,5 +1,6 @@
 package com.techforum.backend.domain.interaction;
 
+import com.techforum.backend.domain.interaction.dtos.VoteDTO;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,5 +26,12 @@ public class InteractionController {
       @PathVariable UUID threadId, Authentication authentication) {
     interactionService.removeBookmark(threadId, authentication);
     return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/comments/{commentId}/votes")
+  public ResponseEntity<Void> upvoteComment(
+      @PathVariable UUID commentId, @RequestBody VoteDTO voteDTO, Authentication authentication) {
+    interactionService.voteComment(commentId, voteDTO.type(), authentication);
+    return ResponseEntity.ok().build();
   }
 }
