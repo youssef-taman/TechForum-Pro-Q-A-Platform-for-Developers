@@ -1,27 +1,45 @@
 spring:
   application:
     name: backend
-
+    security:
+      jwt:
+        secret-key: ${JWT_SECRET_KEY}
+        expiration-time: ${JWT_EXPIRATION_TIME}
   datasource:
     url: jdbc:postgresql://db:5432/${DB_NAME}?currentSchema=techforum
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
-
   flyway:
     create-schemas: true
     schemas: techforum
-
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
   jpa:
     hibernate:
       ddl-auto: validate
     show-sql: true
+    open-in-view: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-
+        default_batch_fetch_size: 50
+        jdbc:
+          batch_size: 25
+          time_zone: UTC
   data:
     redis:
       host: redis
       port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
+
+server:
+  servlet:
+    context-path: /api
