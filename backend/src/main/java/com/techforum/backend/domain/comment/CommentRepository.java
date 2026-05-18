@@ -17,7 +17,7 @@ public interface CommentRepository extends JpaRepository<Comment, UUID> {
   Optional<Comment> findById(@NonNull UUID commentId);
 
   @EntityGraph(attributePaths = {"author"})
-  Page<Comment> findByThread_Id(UUID threadId, Pageable pageable);
+  Page<Comment> findByThread_IdAndParentIsNull(UUID threadId, Pageable pageable);
 
   @EntityGraph(attributePaths = {"author"})
   Page<Comment> getAllByParent_Id(UUID parentId, Pageable pageable);

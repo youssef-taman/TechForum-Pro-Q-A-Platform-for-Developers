@@ -5,6 +5,7 @@ import com.techforum.backend.domain.comment.dtos.CommentDTO;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -16,6 +17,17 @@ import org.springframework.web.bind.annotation.*;
 public class CommentController {
 
   private final CommentService commentService;
+
+  @GetMapping("{threadId}")
+  public ResponseEntity<Page<CommentDTO>> getThreadComments(
+      @PathVariable UUID threadId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "latest", required = false) String sortBy) {
+    Page<CommentDTO> commentDTOPage =
+        commentService.getThreadComments(threadId, page, size, sortBy);
+    return ResponseEntity.ok(commentDTOPage);
+  }
 
   @PostMapping
   public ResponseEntity<CommentDTO> addComment(

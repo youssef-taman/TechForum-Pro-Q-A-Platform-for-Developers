@@ -13,6 +13,10 @@ import com.techforum.backend.domain.user.UserRepository;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -110,5 +114,27 @@ public class CommentService {
     commentRepository.save(comment);
 
     return commentMapper.toDTO(comment);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<CommentDTO> getThreadComments(UUID threadId, int page, int size, String sortBy) {
+
+    Thread thread =
+        threadRepository
+            .findById(threadId)
+            .orElseThrow(() -> new ThreadNotFoundException(threadId, "Wrong Author"));
+
+    Sort sort =
+        switch (sortBy) {
+          case "top score" -> Sort.by("score").descending();
+          case "top interaction" -> Sort.by("replyCount").descending();
+          case "older" -> Sort.by("createdAt").ascending();
+          default -> Sort.by("createdAt").descending();
+        };
+
+    Pageable pageable = PageRequest.of(page, size, sort);
+    Page<Comment> commentPage =
+        commentRepository.findByThread_IdAndParentIsNull(threadId, pageable);
+    return commentPage.map(commentMapper::toDTO);
   }
 }
