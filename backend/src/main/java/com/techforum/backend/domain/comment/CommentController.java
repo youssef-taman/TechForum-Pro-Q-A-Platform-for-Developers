@@ -3,6 +3,7 @@ package com.techforum.backend.domain.comment;
 import com.techforum.backend.domain.comment.dtos.AddCommentDTO;
 import com.techforum.backend.domain.comment.dtos.CommentDTO;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,5 +22,12 @@ public class CommentController {
       @Valid @RequestBody AddCommentDTO addCommentDTO, Authentication authentication) {
     CommentDTO commentDTO = commentService.addComment(addCommentDTO, authentication);
     return ResponseEntity.status(HttpStatus.CREATED).body(commentDTO);
+  }
+
+  @DeleteMapping("/{commentId}")
+  public ResponseEntity<Void> deleteComment(
+      @PathVariable UUID commentId, Authentication authentication) {
+    commentService.deleteComment(commentId, authentication);
+    return ResponseEntity.noContent().build();
   }
 }

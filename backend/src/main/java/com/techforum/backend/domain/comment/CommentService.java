@@ -11,7 +11,9 @@ import com.techforum.backend.domain.thread.ThreadRepository;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,5 +59,32 @@ public class CommentService {
             .build();
     commentRepository.save(comment);
     return commentMapper.toDTO(comment);
+  }
+
+  @Transactional
+  public void deleteComment(UUID commentId, Authentication authentication) {
+
+    String username = authentication.getName();
+
+    User user =
+        userRepository
+            .findByIdentifier(username)
+            .orElseThrow(() -> new UserNotFoundException(username));
+
+    Comment comment =
+        commentRepository.findById(commentId).orElseThrow(CommentNotFoundException::new);
+
+    boolean isAdminOrMod =
+        authentication.getAuthorities().stream()
+            .anyMatch(
+                a ->
+                    a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_MODERATOR"));
+
+    if (!isAdminOrMod && !comment.getAuthor().getUsername().equals(username)) {
+      throw new AccessDeniedException("You don't have permission to delete this comment!");
+    }
+
+    commentRepository.delete(comment);
   }
 }
