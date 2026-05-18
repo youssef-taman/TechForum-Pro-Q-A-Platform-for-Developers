@@ -32,7 +32,7 @@ public class InteractionController {
   @PostMapping("/comments/{commentId}/votes")
   public ResponseEntity<Void> voteComment(
       @PathVariable UUID commentId,
-      @Valid @RequestBody VoteDTO voteDTO,
+      @RequestBody VoteDTO voteDTO,
       Authentication authentication) {
     interactionService.voteComment(commentId, voteDTO.type(), authentication);
     return ResponseEntity.ok().build();
