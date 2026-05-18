@@ -1,7 +1,6 @@
 package com.techforum.backend.domain.interaction;
 
 import com.techforum.backend.domain.interaction.dtos.VoteDTO;
-import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -31,9 +30,7 @@ public class InteractionController {
 
   @PostMapping("/comments/{commentId}/votes")
   public ResponseEntity<Void> voteComment(
-      @PathVariable UUID commentId,
-      @RequestBody VoteDTO voteDTO,
-      Authentication authentication) {
+      @PathVariable UUID commentId, @RequestBody VoteDTO voteDTO, Authentication authentication) {
     interactionService.voteComment(commentId, voteDTO.type(), authentication);
     return ResponseEntity.ok().build();
   }
