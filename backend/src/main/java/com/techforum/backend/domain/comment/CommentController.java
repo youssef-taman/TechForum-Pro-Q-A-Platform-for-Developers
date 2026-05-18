@@ -29,6 +29,17 @@ public class CommentController {
     return ResponseEntity.ok(commentDTOPage);
   }
 
+  @GetMapping("{commentId}/replies")
+  public ResponseEntity<Page<CommentDTO>> getCommentReplies(
+      @PathVariable UUID commentId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "latest", required = false) String sortBy) {
+    Page<CommentDTO> commentDTOPage =
+        commentService.getCommentReplies(commentId, page, size, sortBy);
+    return ResponseEntity.ok(commentDTOPage);
+  }
+
   @PostMapping
   public ResponseEntity<CommentDTO> addComment(
       @Valid @RequestBody AddCommentDTO addCommentDTO, Authentication authentication) {

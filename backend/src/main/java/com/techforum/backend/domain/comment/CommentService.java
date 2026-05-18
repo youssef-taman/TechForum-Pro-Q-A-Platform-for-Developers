@@ -137,4 +137,23 @@ public class CommentService {
         commentRepository.findByThread_IdAndParentIsNull(threadId, pageable);
     return commentPage.map(commentMapper::toDTO);
   }
+
+  @Transactional(readOnly = true)
+  public Page<CommentDTO> getCommentReplies(UUID commentId, int page, int size, String sortBy) {
+
+    Comment comment =
+        commentRepository.findById(commentId).orElseThrow(CommentNotFoundException::new);
+
+    Sort sort =
+        switch (sortBy) {
+          case "top score" -> Sort.by("score").descending();
+          case "top interaction" -> Sort.by("replyCount").descending();
+          case "older" -> Sort.by("createdAt").ascending();
+          default -> Sort.by("createdAt").descending();
+        };
+
+    Pageable pageable = PageRequest.of(page, size, sort);
+    Page<Comment> commentPage = commentRepository.getAllByParent_Id(commentId, pageable);
+    return commentPage.map(commentMapper::toDTO);
+  }
 }
