@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class CommentExceptionHandler {
 
-  @ExceptionHandler(CommentException.class)
-  public ResponseEntity<Map<String, Object>> handleThreadNotFound(
+  @ExceptionHandler(CommentNotFoundException.class)
+  public ResponseEntity<Map<String, Object>> handleCommentNotFound(
       CommentNotFoundException exception) {
     Map<String, Object> body = new HashMap<>();
     body.put("message", exception.getMessage());
