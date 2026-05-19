@@ -7,7 +7,6 @@ public record CommentDTO(
     UUID id,
     UUID parentId,
     UUID threadId,
-    UUID authorId,
     String authorName,
     String content,
     int replyCount,
