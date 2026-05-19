@@ -2,10 +2,9 @@ package com.techforum.backend.domain.thread;
 
 import com.techforum.backend.domain.thread.dtos.ThreadCreateDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadDTO;
+import com.techforum.backend.domain.thread.dtos.ThreadSearchDTO;
 import com.techforum.backend.domain.thread.dtos.ThreadUpdateDTO;
-import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import jakarta.validation.Valid;
-import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -57,25 +56,20 @@ public class ThreadController {
 
   @GetMapping("/user/{username}")
   public ResponseEntity<Page<ThreadDTO>> getUserThreads(
-      @PathVariable String username,
-      @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "10") int size,
-      @RequestParam(defaultValue = "latest", required = false) String sortBy,
-      @RequestParam(required = false) ThreadStatus status,
-      @RequestParam(required = false) Set<String> tags) {
-    Page<ThreadDTO> userThreads =
-        threadService.getUserThreads(username, page, size, sortBy, status, tags);
+      @PathVariable String username, ThreadSearchDTO threadSearchDTO) {
+    Page<ThreadDTO> userThreads = threadService.getUserThreads(threadSearchDTO, username);
     return ResponseEntity.ok(userThreads);
   }
 
   @GetMapping
-  public ResponseEntity<Page<ThreadDTO>> getTimeline(
-      @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "10") int size,
-      @RequestParam(defaultValue = "latest", required = false) String sortBy,
-      @RequestParam(required = false) ThreadStatus status,
-      @RequestParam(required = false) Set<String> tags) {
-    Page<ThreadDTO> userThreads = threadService.getTimeline(page, size, sortBy, status, tags);
+  public ResponseEntity<Page<ThreadDTO>> getTimeline(ThreadSearchDTO threadSearchDTO) {
+    Page<ThreadDTO> userThreads = threadService.getTimeline(threadSearchDTO);
     return ResponseEntity.ok(userThreads);
+  }
+
+  @GetMapping("/search")
+  public ResponseEntity<Page<ThreadDTO>> searchThreads(ThreadSearchDTO threadSearchDTO) {
+    Page<ThreadDTO> searchResult = threadService.searchThreads(threadSearchDTO);
+    return ResponseEntity.ok(searchResult);
   }
 }
