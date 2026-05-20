@@ -1,29 +1,24 @@
 package com.techforum.backend.domain.thread;
 
+import static com.techforum.backend.domain.thread.QThread.thread;
+
 import com.querydsl.core.BooleanBuilder;
 import com.techforum.backend.common.exception.thread.DuplicateThreadException;
 import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.tag.Tag;
 import com.techforum.backend.domain.tag.mappers.TagMapper;
-import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadCreateDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadUpdateDTO;
+import com.techforum.backend.domain.thread.dtos.*;
 import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.thread.mappers.ThreadMapper;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -36,7 +31,6 @@ public class ThreadService {
   private final ThreadRepository threadRepository;
   private final UserRepository userRepository;
   private final ThreadMapper threadMapper;
-  private final double THREAD_DUPLICATION_SIMILARITY_THRESHOLD = 0.95;
   private final TagMapper tagMapper;
 
   private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
@@ -44,6 +38,18 @@ public class ThreadService {
     TODO:
         * Connect to python's duplication detection model
         * Using the thread label and body, return the embedding
+     */
+
+    float[] embedding = new float[768];
+    //        Thread embedding process
+    return embedding;
+  }
+
+  private float[] getThreadEmbedding(ThreadSearchDTO threadSearchDTO) {
+    /*
+    TODO:
+        * Connect to python's duplication detection model
+        * Using the search and filter proprties, return the embedding
      */
 
     float[] embedding = new float[768];
@@ -67,15 +73,33 @@ public class ThreadService {
      */
   }
 
-  private void checkDuplicateInThreadArchive(float[] threadEmbedding) {
+  private List<DuplicateThreadDTO> findSimilarThreadsInTrending(float[] threadEmbedding) {
+    /*
+    TODO:
+        * Connect to Redis
+        * Using RediSearch, return similar threads
+     */
 
-    Set<DuplicateThreadDTO> duplicateThreads =
-        threadRepository.findDuplicateWithThreshold(
-            threadEmbedding, THREAD_DUPLICATION_SIMILARITY_THRESHOLD);
+    List<DuplicateThreadDTO> duplicateThreadDTOS = new ArrayList<>();
+    //    duplicateThreadDTOS = redis.findSimilarThreads();
+    return duplicateThreadDTOS;
+  }
+
+  private void checkDuplicateInThreadArchive(
+      float[] threadEmbedding, double threshold, Limit limit) {
+
+    List<DuplicateThreadDTO> duplicateThreads =
+        threadRepository.findDuplicateWithThreshold(threadEmbedding, threshold, limit);
 
     if (!duplicateThreads.isEmpty()) {
       throw new DuplicateThreadException(duplicateThreads);
     }
+  }
+
+  private List<DuplicateThreadDTO> findSimilarThreadsInArchive(
+      float[] threadEmbedding, double threshold, Limit limit) {
+
+    return threadRepository.findDuplicateWithThreshold(threadEmbedding, threshold, limit);
   }
 
   private Set<Tag> classifyThreadWithTags(float[] threadEmbedding) {
@@ -117,7 +141,7 @@ public class ThreadService {
 
     if (!ignoreDuplicates) {
       checkDuplicationInTrendingThreads(embedding);
-      checkDuplicateInThreadArchive(embedding);
+      checkDuplicateInThreadArchive(embedding, 0.95, Limit.of(3));
     }
 
     Thread thread = saveThread(threadCreateDTO, author, embedding);
@@ -183,24 +207,69 @@ public class ThreadService {
   }
 
   @NonNull
-  private Page<ThreadDTO> getThreadDTOS(
-      int page,
-      int size,
-      ThreadStatus status,
-      Set<String> tags,
-      String sortBy,
-      QThread thread,
-      BooleanBuilder filterBuilder) {
+  private BooleanBuilder buildSearchEngine(ThreadSearchDTO threadSearchDTO, String targetAuthor) {
 
+    QThread thread = QThread.thread;
+    BooleanBuilder filterBuilder = new BooleanBuilder();
+
+    if (!threadSearchDTO.semanticAiSearch()) {
+      if (threadSearchDTO.keyword() != null && !threadSearchDTO.keyword().isBlank()) {
+        String[] searchWords = threadSearchDTO.keyword().trim().split("\\s+");
+        BooleanBuilder keywordBuilder = new BooleanBuilder();
+
+        for (String word : searchWords) {
+          keywordBuilder.andAnyOf(
+              thread.title.containsIgnoreCase(word), thread.body.containsIgnoreCase(word));
+        }
+
+        filterBuilder.and(keywordBuilder);
+      }
+    }
+
+    ThreadStatus status = threadSearchDTO.status();
     if (status != null) {
       filterBuilder.and(thread.status.eq(status));
     }
 
-    if (tags != null && !tags.isEmpty()) {
-      filterBuilder.and(thread.tags.any().name.in(tags));
+    if (threadSearchDTO.tags() != null) {
+      Set<String> tags =
+          threadSearchDTO.tags().stream().map(String::toLowerCase).collect(Collectors.toSet());
+
+      if (!tags.isEmpty()) {
+        filterBuilder.and(thread.tags.any().name.in(tags));
+      }
     }
 
-    sortBy = (sortBy != null) ? sortBy.toLowerCase() : "latest";
+    Instant fromTime = threadSearchDTO.from();
+    Instant toTime = threadSearchDTO.to();
+    if (fromTime != null && toTime != null) {
+      filterBuilder.and(thread.createdAt.between(fromTime, toTime));
+    } else if (fromTime != null) {
+      filterBuilder.and(thread.createdAt.goe(fromTime));
+    } else if (toTime != null) {
+      filterBuilder.and(thread.createdAt.loe(toTime));
+    }
+
+    if (targetAuthor != null) {
+      filterBuilder.and(QThread.thread.author.username.equalsIgnoreCase(targetAuthor));
+    }
+
+    Integer minComments = threadSearchDTO.minCommentsNumber();
+    if (minComments != null) {
+      filterBuilder.and(thread.numberComments.goe(minComments));
+    }
+
+    Integer maxComments = threadSearchDTO.maxCommentsNumber();
+    if (maxComments != null) {
+      filterBuilder.and(thread.numberComments.loe(maxComments));
+    }
+
+    return filterBuilder;
+  }
+
+  @NonNull
+  private Pageable buildPage(int page, int size, String sortBy) {
+
     Sort sort =
         switch (sortBy) {
           case "top" -> Sort.by("numberComments").descending();
@@ -208,35 +277,80 @@ public class ThreadService {
           default -> Sort.by("createdAt").descending();
         };
 
-    Pageable pageable = PageRequest.of(page, size, sort);
-    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
-    return threadPage.map(threadMapper::toDTO);
+    return PageRequest.of(page, size, sort);
   }
 
   @Transactional(readOnly = true)
-  public Page<ThreadDTO> getUserThreads(
-      String username, int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
+  public Page<ThreadDTO> getUserThreads(ThreadSearchDTO threadSearchDTO, String username) {
 
+    assert (Objects.equals(username, threadSearchDTO.author()));
     Optional<User> user = userRepository.findByIdentifier(username);
     if (user.isEmpty()) {
       throw new UserNotFoundException(username);
     }
 
-    QThread thread = QThread.thread;
-    BooleanBuilder filterBuilder = new BooleanBuilder();
+    BooleanBuilder filterBuilder = buildSearchEngine(threadSearchDTO, username);
+    Pageable pageable =
+        buildPage(threadSearchDTO.page(), threadSearchDTO.size(), threadSearchDTO.sortBy());
 
-    filterBuilder.and(thread.author.id.eq(user.get().getId()));
-
-    return getThreadDTOS(page, size, status, tags, sortBy, thread, filterBuilder);
+    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
+    return threadPage.map(threadMapper::toDTO);
   }
 
   @Transactional(readOnly = true)
-  public Page<ThreadDTO> getTimeline(
-      int page, int size, String sortBy, ThreadStatus status, Set<String> tags) {
+  public Page<ThreadDTO> getTimeline(ThreadSearchDTO threadSearchDTO) {
 
-    QThread thread = QThread.thread;
+    BooleanBuilder filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
+    Pageable pageable =
+        buildPage(threadSearchDTO.page(), threadSearchDTO.size(), threadSearchDTO.sortBy());
+
+    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
+    return threadPage.map(threadMapper::toDTO);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<ThreadDTO> searchThreads(ThreadSearchDTO threadSearchDTO) {
+
     BooleanBuilder filterBuilder = new BooleanBuilder();
+    Pageable pageable =
+        buildPage(threadSearchDTO.page(), threadSearchDTO.size(), threadSearchDTO.sortBy());
 
-    return getThreadDTOS(page, size, status, tags, sortBy, thread, filterBuilder);
+    if (!threadSearchDTO.semanticAiSearch()) {
+      filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
+      Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
+      return threadPage.map(threadMapper::toDTO);
+    }
+
+    float[] embedding = getThreadEmbedding(threadSearchDTO);
+    List<DuplicateThreadDTO> duplicateThreadDTOS;
+
+    duplicateThreadDTOS = findSimilarThreadsInTrending(embedding);
+    if (duplicateThreadDTOS.isEmpty()) {
+      duplicateThreadDTOS = findSimilarThreadsInArchive(embedding, 0.7, Limit.of(100));
+    }
+    if (duplicateThreadDTOS.isEmpty()) {
+      return new PageImpl<>(Collections.emptyList(), pageable, 0);
+    }
+
+    List<UUID> orderedIds = duplicateThreadDTOS.stream().map(DuplicateThreadDTO::threadId).toList();
+
+    filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
+    filterBuilder.and(QThread.thread.id.in(orderedIds));
+
+    Iterable<Thread> filteredIterable = threadRepository.findAll(filterBuilder);
+    List<Thread> filteredThreads = new ArrayList<>();
+
+    filteredIterable.forEach(filteredThreads::add);
+    filteredThreads.sort(Comparator.comparingInt(t -> orderedIds.indexOf(t.getId())));
+
+    int start = (int) pageable.getOffset();
+    int end = Math.min((start + pageable.getPageSize()), filteredThreads.size());
+
+    List<ThreadDTO> sortedDtos = new ArrayList<>();
+    if (start < filteredThreads.size()) {
+      sortedDtos = filteredThreads.subList(start, end).stream().map(threadMapper::toDTO).toList();
+    }
+
+    return new PageImpl<>(sortedDtos, pageable, filteredThreads.size());
   }
 }

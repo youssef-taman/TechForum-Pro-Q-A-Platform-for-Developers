@@ -2,10 +2,11 @@ package com.techforum.backend.domain.thread;
 
 import com.querydsl.core.types.Predicate;
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
+import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.jspecify.annotations.NonNull;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -27,34 +28,15 @@ public interface ThreadRepository
   @Override
   @NonNull
   @EntityGraph(attributePaths = {"author"})
+  Iterable<Thread> findAll(Predicate predicate);
+
+  @Override
+  @NonNull
+  @EntityGraph(attributePaths = {"author"})
   Page<Thread> findAll(Predicate predicate, Pageable pageable);
 
   @EntityGraph(attributePaths = {"author", "tags"})
   Optional<Thread> findExpandedThreadById(UUID threadId);
-
-  @Query(
-      value =
-          """
-            SELECT th FROM Thread th
-            JOIN FETCH th.author
-            WHERE LOWER(th.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-               OR LOWER(th.body) LIKE LOWER(CONCAT('%', :keyword, '%'))
-            """,
-      countQuery =
-          """
-            SELECT count(th) FROM Thread th
-            WHERE LOWER(th.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-               OR LOWER(th.body) LIKE LOWER(CONCAT('%', :keyword, '%'))
-            """)
-  Page<Thread> findByTitleOrBody(@Param("keyword") String keyword, Pageable pageable);
-
-  @Query(
-      """
-            SELECT e.embedding
-            FROM ThreadEmbedding e
-            WHERE e.thread.id = :thread_id
-    """)
-  float[] getThreadEmbedding(@Param("thread_id") UUID threadId);
 
   @Query(
       value =
@@ -69,11 +51,10 @@ public interface ThreadRepository
         JOIN Users u ON u.id = th.user_id
         WHERE (1 - (e.embedding <=> CAST(:embedding AS VECTOR))) >= :threshold
         ORDER BY e.embedding <=> CAST(:embedding AS VECTOR) ASC
-        LIMIT 3
         """,
       nativeQuery = true)
-  Set<DuplicateThreadDTO> findDuplicateWithThreshold(
-      @Param("embedding") float[] embedding, @Param("threshold") double threshold);
+  List<DuplicateThreadDTO> findDuplicateWithThreshold(
+      @Param("embedding") float[] embedding, @Param("threshold") double threshold, Limit limit);
 
   @Modifying
   @Query(
