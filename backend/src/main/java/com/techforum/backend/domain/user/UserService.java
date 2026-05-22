@@ -1,8 +1,8 @@
 package com.techforum.backend.domain.user;
 
+import com.techforum.backend.common.exception.user.UserNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -12,17 +12,13 @@ public class UserService {
 
   @Transactional
   public void suspendUser(String id) {
-    // TODO: Change to Resource Not Found Exception
-    User user = userRepository.findByIdentifier(id)
-        .orElseThrow(() -> new UsernameNotFoundException("User Id not found"));
+    User user = userRepository.findByIdentifier(id).orElseThrow(UserNotFoundException::new);
     user.setSuspended(true);
   }
 
   @Transactional
   public void removeUser(String id) {
-    // TODO: Change to Resource Not Found Exception
-    User user = userRepository.findByIdentifier(id)
-        .orElseThrow(() -> new UsernameNotFoundException("User Id not found"));
+    User user = userRepository.findByIdentifier(id).orElseThrow(UserNotFoundException::new);
     userRepository.delete(user);
   }
 }
