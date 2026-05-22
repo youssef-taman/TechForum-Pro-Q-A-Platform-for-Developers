@@ -23,6 +23,32 @@ public class UserService {
   private final UserRepository userRepository;
 
   @Transactional
+  public void promoteUser(UUID id, RoleType role) {
+    User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
+
+    if (user.getRole().ordinal() >= role.ordinal()) {
+      throw new IllegalStateException("Cannot promote to the same or a lower role.");
+    }
+
+    user.setRole(role);
+  }
+
+  @Transactional
+  public void demoteModerator(UUID id) {
+    User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
+
+    if (user.getRole() == RoleType.ADMIN) {
+      throw new IllegalStateException("Cannot demote an administrator.");
+    }
+
+    if (user.getRole() == RoleType.USER) {
+      throw new IllegalStateException("User is already at the base role.");
+    }
+
+    user.setRole(RoleType.USER);
+  }
+
+  @Transactional
   public void suspendUser(UUID id) {
     verifyCurrentUserCanManageUsers();
     User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
@@ -40,6 +66,7 @@ public class UserService {
 
   public Page<UserDTO> listUsers(int page, int size) {
     Pageable pageable = PageRequest.of(page, size, Sort.by("username").ascending());
+    return userRepository.findAll(pageable).map(userMapper::toDTO);
     Page<User> userPage = userRepository.findAll(pageable);
     return userPage.map(userMapper::toDTO);
   }
