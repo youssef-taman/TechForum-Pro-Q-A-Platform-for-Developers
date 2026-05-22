@@ -3,6 +3,7 @@ package com.techforum.backend.domain.user;
 import com.techforum.backend.domain.user.dtos.UserDTO;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -24,13 +25,13 @@ public class UserController {
   private final UserService userService;
 
   @PutMapping("/{id}/suspend")
-  public ResponseEntity<Void> suspend(@PathVariable String id) {
+  public ResponseEntity<Void> suspend(@PathVariable UUID id) {
     userService.suspendUser(id);
     return ResponseEntity.noContent().build();
   }
 
   @DeleteMapping("/{id}")
-  public ResponseEntity<Void> removeUser(@PathVariable String id) {
+  public ResponseEntity<Void> removeUser(@PathVariable UUID id) {
     userService.removeUser(id);
     return ResponseEntity.noContent().build();
   }

@@ -4,14 +4,13 @@ import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.user.dtos.UserDTO;
 import com.techforum.backend.domain.user.mappers.UserMapper;
 import jakarta.transaction.Transactional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -20,14 +19,14 @@ public class UserService {
   private final UserRepository userRepository;
 
   @Transactional
-  public void suspendUser(String id) {
-    User user = userRepository.findById(UUID.fromString(id)).orElseThrow(UserNotFoundException::new);
+  public void suspendUser(UUID id) {
+    User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
     user.setSuspended(true);
   }
 
   @Transactional
-  public void removeUser(String id) {
-    User user = userRepository.findById(UUID.fromString(id)).orElseThrow(UserNotFoundException::new);
+  public void removeUser(UUID id) {
+    User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
     userRepository.delete(user);
   }
 
