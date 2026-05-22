@@ -4,6 +4,7 @@ import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.user.dtos.UserDTO;
 import com.techforum.backend.domain.user.enums.RoleType;
 import com.techforum.backend.domain.user.mappers.UserMapper;
+import jakarta.transaction.Transactional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -13,6 +14,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
@@ -48,6 +52,7 @@ public class UserService {
 
   @Transactional
   public void suspendUser(UUID id) {
+    verifyCurrentUserCanManageUsers();
     User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
     verifyTargetUserCanBeManaged(user);
     user.setSuspended(true);
@@ -55,6 +60,7 @@ public class UserService {
 
   @Transactional
   public void removeUser(UUID id) {
+    verifyCurrentUserCanManageUsers();
     User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
     verifyTargetUserCanBeManaged(user);
     userRepository.delete(user);
@@ -63,6 +69,34 @@ public class UserService {
   public Page<UserDTO> listUsers(int page, int size) {
     Pageable pageable = PageRequest.of(page, size, Sort.by("username").ascending());
     return userRepository.findAll(pageable).map(userMapper::toDTO);
+    Page<User> userPage = userRepository.findAll(pageable);
+    return userPage.map(userMapper::toDTO);
+  }
+
+  private void verifyCurrentUserCanManageUsers() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+    if (authentication == null || authentication.getAuthorities() == null) {
+      throw new AccessDeniedException("Insufficient permissions to manage users.");
+    }
+
+    boolean canManageUsers =
+        authentication.getAuthorities().stream()
+            .map(authority -> authority.getAuthority().replaceFirst("^ROLE_", ""))
+            .map(this::toRoleType)
+            .anyMatch(RoleType::isCanDeleteOrSuspend);
+
+    if (!canManageUsers) {
+      throw new AccessDeniedException("Insufficient permissions to manage users.");
+    }
+  }
+
+  private RoleType toRoleType(String roleName) {
+    try {
+      return RoleType.valueOf(roleName);
+    } catch (IllegalArgumentException ex) {
+      return RoleType.USER;
+    }
   }
 
   private void verifyTargetUserCanBeManaged(User user) {

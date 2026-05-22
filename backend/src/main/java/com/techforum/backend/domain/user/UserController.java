@@ -2,6 +2,7 @@ package com.techforum.backend.domain.user;
 
 import com.techforum.backend.domain.user.dtos.UserDTO;
 import com.techforum.backend.domain.user.enums.RoleType;
+
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import java.util.UUID;
@@ -11,6 +12,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @Validated
 @RestController
@@ -36,6 +45,10 @@ public class UserController {
 
   @PatchMapping("/{id}/suspend")
   @PreAuthorize("hasRole('ADMIN')")
+
+  private final UserService userService;
+
+  @PutMapping("/{id}/suspend")
   public ResponseEntity<Void> suspend(@PathVariable UUID id) {
     userService.suspendUser(id);
     return ResponseEntity.noContent().build();
