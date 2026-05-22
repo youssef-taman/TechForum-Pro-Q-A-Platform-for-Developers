@@ -14,9 +14,7 @@ public class UserController {
 
   @PostMapping("/{id}/promote")
   @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<Void> promoteUser(
-      @PathVariable String id,
-      @RequestParam RoleType role) {
+  public ResponseEntity<Void> promoteUser(@PathVariable String id, @RequestParam RoleType role) {
 
     userService.promoteUser(id, role);
     return ResponseEntity.noContent().build();
