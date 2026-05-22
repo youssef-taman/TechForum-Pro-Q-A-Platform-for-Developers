@@ -3,7 +3,16 @@ package com.techforum.backend.domain.user;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.techforum.backend.domain.user.dtos.UserDTO;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
 
+@Validated
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
@@ -21,5 +30,13 @@ public class UserController {
   public ResponseEntity<Void> removeUser(@PathVariable String id) {
     userService.removeUser(id);
     return ResponseEntity.noContent().build();
+  }
+
+  @GetMapping
+  public ResponseEntity<Page<UserDTO>> listUsers(
+      @RequestParam(defaultValue = "0") @Min(0) int page,
+      @RequestParam(defaultValue = "10") @Positive int size) {
+    Page<UserDTO> userPage = userService.listUsers(page, size);
+    return ResponseEntity.ok(userPage);
   }
 }
