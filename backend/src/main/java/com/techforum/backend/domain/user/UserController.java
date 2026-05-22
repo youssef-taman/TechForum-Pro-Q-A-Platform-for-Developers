@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
   private final UserService userService;
 
-  // POST /users/123/promote?role=ADMIN
   @PostMapping("/{id}/promote")
   @PreAuthorize("hasRole('ADMIN')")
   public ResponseEntity<Void> promoteUser(

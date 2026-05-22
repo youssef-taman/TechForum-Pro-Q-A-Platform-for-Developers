@@ -1,8 +1,8 @@
 package com.techforum.backend.domain.user;
 
+import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.user.enums.RoleType;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,8 +13,7 @@ public class UserService {
 
   @Transactional
   public void promoteUser(String id, RoleType role) {
-    User user = userRepository.findByIdentifier(id)
-        .orElseThrow(() -> new UsernameNotFoundException("User Id not found"));
+    User user = userRepository.findByIdentifier(id).orElseThrow(UserNotFoundException::new);
 
     // TODO: check if upgrading or downgrading
     user.setRole(role);
@@ -22,8 +21,7 @@ public class UserService {
 
   @Transactional
   public void demoteModerator(String id) {
-    User user = userRepository.findByIdentifier(id)
-        .orElseThrow(() -> new UsernameNotFoundException("User Id not found"));
+    User user = userRepository.findByIdentifier(id).orElseThrow(UserNotFoundException::new);
 
     if (user.getRole() == RoleType.ADMIN) {
       throw new IllegalStateException("Cannot demote an administrator.");
