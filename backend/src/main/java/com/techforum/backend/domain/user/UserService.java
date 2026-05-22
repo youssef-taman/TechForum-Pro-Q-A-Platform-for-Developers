@@ -17,13 +17,13 @@ public class UserService {
   
   @Transactional
   public void suspendUser(String id) {
-    User user = userRepository.findByIdentifier(id).orElseThrow(UserNotFoundException::new);
+    User user = userRepository.findById(UUID.fromString(id)).orElseThrow(UserNotFoundException::new);
     user.setSuspended(true);
   }
 
   @Transactional
   public void removeUser(String id) {
-    User user = userRepository.findByIdentifier(id).orElseThrow(UserNotFoundException::new);
+    User user = userRepository.findById(UUID.fromString(id)).orElseThrow(UserNotFoundException::new);
     userRepository.delete(user);
   }
 
