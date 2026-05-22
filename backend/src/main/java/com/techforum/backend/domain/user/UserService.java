@@ -67,6 +67,8 @@ public class UserService {
   public Page<UserDTO> listUsers(int page, int size) {
     Pageable pageable = PageRequest.of(page, size, Sort.by("username").ascending());
     return userRepository.findAll(pageable).map(userMapper::toDTO);
+    Page<User> userPage = userRepository.findAll(pageable);
+    return userPage.map(userMapper::toDTO);
   }
 
   private void verifyCurrentUserCanManageUsers() {
