@@ -57,7 +57,7 @@ public class CommentController {
   @PatchMapping("/{commentId}")
   public ResponseEntity<CommentDTO> updateComment(
       @PathVariable UUID commentId,
-      @Valid @RequestParam String updatedContent,
+      @Valid @RequestBody String updatedContent,
       Authentication authentication) {
     CommentDTO commentDTO = commentService.updateComment(commentId, updatedContent, authentication);
     return ResponseEntity.ok(commentDTO);

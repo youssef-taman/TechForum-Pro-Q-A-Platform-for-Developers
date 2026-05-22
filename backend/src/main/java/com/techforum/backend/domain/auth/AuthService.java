@@ -56,8 +56,8 @@ public class AuthService {
 
     User newUser =
         User.builder()
-            .username(request.username().trim().toLowerCase())
-            .email(request.email().trim().toLowerCase())
+            .username(normalizedUsername.trim())
+            .email(normalizedEmail.trim())
             .password(passwordEncoder.encode(request.password()))
             .createdAt(Instant.now())
             .isSuspended(false)

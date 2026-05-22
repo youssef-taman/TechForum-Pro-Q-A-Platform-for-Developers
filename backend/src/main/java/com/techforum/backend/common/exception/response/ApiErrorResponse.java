@@ -1,4 +1,4 @@
-package com.techforum.backend.common.response;
+package com.techforum.backend.common.exception.response;
 
 import java.util.Map;
 import lombok.Builder;

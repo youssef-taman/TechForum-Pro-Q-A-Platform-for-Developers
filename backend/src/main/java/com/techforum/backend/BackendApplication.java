@@ -7,11 +7,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 @SecurityScheme(
-		name = "Bearer Authentication",
-		type = SecuritySchemeType.HTTP,
-		bearerFormat = "JWT",
-		scheme = "bearer"
-)
+    name = "Bearer Authentication",
+    type = SecuritySchemeType.HTTP,
+    bearerFormat = "JWT",
+    scheme = "bearer")
 public class BackendApplication {
 
   public static void main(String[] args) {

@@ -1,13 +1,11 @@
 package com.techforum.backend.domain.thread;
 
-import static com.techforum.backend.domain.thread.QThread.thread;
-
 import com.querydsl.core.BooleanBuilder;
-import com.techforum.backend.common.exception.thread.DuplicateThreadException;
 import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.tag.Tag;
-import com.techforum.backend.domain.tag.mappers.TagMapper;
+import com.techforum.backend.domain.tag.TagRepository;
+import com.techforum.backend.domain.tag.dtos.TagDTO;
 import com.techforum.backend.domain.thread.dtos.*;
 import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.thread.mappers.ThreadMapper;
@@ -31,100 +29,116 @@ public class ThreadService {
   private final ThreadRepository threadRepository;
   private final UserRepository userRepository;
   private final ThreadMapper threadMapper;
-  private final TagMapper tagMapper;
+  private final TagRepository tagRepository;
 
-  private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
-    /*
-    TODO:
-        * Connect to python's duplication detection model
-        * Using the thread label and body, return the embedding
-     */
+  //  private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
+  //    /*
+  //    TODO:
+  //        * Connect to python's duplication detection model
+  //        * Using the thread label and body, return the embedding
+  //     */
+  //
+  //    float[] embedding = new float[768];
+  //    //        Thread embedding process
+  //    return embedding;
+  //  }
 
-    float[] embedding = new float[768];
-    //        Thread embedding process
-    return embedding;
-  }
+  //  private float[] getThreadEmbedding(ThreadSearchDTO threadSearchDTO) {
+  //    /*
+  //    TODO:
+  //        * Connect to python's duplication detection model
+  //        * Using the search and filter proprties, return the embedding
+  //     */
+  //
+  //    float[] embedding = new float[768];
+  //    //        Thread embedding process
+  //    return embedding;
+  //  }
 
-  private float[] getThreadEmbedding(ThreadSearchDTO threadSearchDTO) {
-    /*
-    TODO:
-        * Connect to python's duplication detection model
-        * Using the search and filter proprties, return the embedding
-     */
+  //  private void checkDuplicationInTrendingThreads(float[] threadEmbedding) {
+  //    /*
+  //    TODO:
+  //        * Connect to Redis
+  //        * Using RediSearch, if there is a similar thread
+  //        * If so, throw an exception with its ID
+  //     */
+  //
+  //    /*
+  //    UUID duplicateThreadId = redis.checkDuplication();
+  //    if (duplicateThreadId != null){
+  //        throw new DuplicateThreadException(duplicateThreadId);
+  //    }
+  //     */
+  //  }
 
-    float[] embedding = new float[768];
-    //        Thread embedding process
-    return embedding;
-  }
+  //  private List<DuplicateThreadDTO> findSimilarThreadsInTrending(float[] threadEmbedding) {
+  //    /*
+  //    TODO:
+  //        * Connect to Redis
+  //        * Using RediSearch, return similar threads
+  //     */
+  //
+  //    List<DuplicateThreadDTO> duplicateThreadDTOS = new ArrayList<>();
+  //    //    duplicateThreadDTOS = redis.findSimilarThreads();
+  //    return duplicateThreadDTOS;
+  //  }
 
-  private void checkDuplicationInTrendingThreads(float[] threadEmbedding) {
-    /*
-    TODO:
-        * Connect to Redis
-        * Using RediSearch, if there is a similar thread
-        * If so, throw an exception with its ID
-     */
+  //  private void checkDuplicateInThreadArchive(
+  //      float[] threadEmbedding, double threshold, Limit limit) {
+  //
+  //    List<DuplicateThreadDTO> duplicateThreads =
+  //        threadRepository.findDuplicateWithThreshold(threadEmbedding, threshold, limit);
+  //
+  //    if (!duplicateThreads.isEmpty()) {
+  //      throw new DuplicateThreadException(duplicateThreads);
+  //    }
+  //  }
 
-    /*
-    UUID duplicateThreadId = redis.checkDuplication();
-    if (duplicateThreadId != null){
-        throw new DuplicateThreadException(duplicateThreadId);
-    }
-     */
-  }
+  //  private List<DuplicateThreadDTO> findSimilarThreadsInArchive(
+  //      float[] threadEmbedding, double threshold, Limit limit) {
+  //
+  //    return threadRepository.findDuplicateWithThreshold(threadEmbedding, threshold, limit);
+  //  }
 
-  private List<DuplicateThreadDTO> findSimilarThreadsInTrending(float[] threadEmbedding) {
-    /*
-    TODO:
-        * Connect to Redis
-        * Using RediSearch, return similar threads
-     */
-
-    List<DuplicateThreadDTO> duplicateThreadDTOS = new ArrayList<>();
-    //    duplicateThreadDTOS = redis.findSimilarThreads();
-    return duplicateThreadDTOS;
-  }
-
-  private void checkDuplicateInThreadArchive(
-      float[] threadEmbedding, double threshold, Limit limit) {
-
-    List<DuplicateThreadDTO> duplicateThreads =
-        threadRepository.findDuplicateWithThreshold(threadEmbedding, threshold, limit);
-
-    if (!duplicateThreads.isEmpty()) {
-      throw new DuplicateThreadException(duplicateThreads);
-    }
-  }
-
-  private List<DuplicateThreadDTO> findSimilarThreadsInArchive(
-      float[] threadEmbedding, double threshold, Limit limit) {
-
-    return threadRepository.findDuplicateWithThreshold(threadEmbedding, threshold, limit);
-  }
-
-  private Set<Tag> classifyThreadWithTags(float[] threadEmbedding) {
-    /*
-    TODO:
-        * Connect to python's question auto tagging model
-        * Using the thread embedding, return the set of tags describing the content
-     */
-
-    Set<Tag> tags = new HashSet<>();
-    //        Question tagging process
-    return tags;
-  }
-
+  //  private Set<Tag> classifyThreadWithTags(float[] threadEmbedding) {
+  //    /*
+  //    TODO:
+  //        * Connect to python's question auto tagging model
+  //        * Using the thread embedding, return the set of tags describing the content
+  //     */
+  //
+  //    Set<Tag> tags = new HashSet<>();
+  //    //        Question tagging process
+  //    return tags;
+  //  }
+  //
   private @NonNull Thread saveThread(
-      ThreadCreateDTO threadCreateDTO, User author, float[] embedding) {
+      ThreadCreateDTO threadCreateDTO, User author, Set<Tag> managedTags) {
     Thread thread = this.threadMapper.toEntity(threadCreateDTO);
     thread.setAuthor(author);
     thread.setStatus(ThreadStatus.OPEN);
-    thread.addTags(classifyThreadWithTags(embedding));
-
-    ThreadEmbedding threadEmbedding = new ThreadEmbedding(thread, embedding);
+    thread.setCreatedAt(Instant.now());
+    thread.setTags(managedTags);
+    //    thread.addTags(classifyThreadWithTags(embedding));
     threadRepository.save(thread);
-    threadRepository.saveThreadEmbedding(threadEmbedding);
+
+    //    ThreadEmbedding threadEmbedding = new ThreadEmbedding(thread, embedding);
+    //    threadRepository.saveThreadEmbedding(threadEmbedding);
+
     return thread;
+  }
+
+  private @NonNull Set<Tag> getOrCreateTags(Set<TagDTO> tagDTOS) {
+    Set<Tag> managedTags = new HashSet<>();
+    for (TagDTO tagDTO : tagDTOS) {
+      String tagName = tagDTO.name().trim().toLowerCase();
+
+      Tag tag =
+          tagRepository.findByName(tagName).orElseGet(() -> tagRepository.save(new Tag(tagName)));
+
+      managedTags.add(tag);
+    }
+    return managedTags;
   }
 
   @Transactional
@@ -137,14 +151,15 @@ public class ThreadService {
             .findByIdentifier(currentUserIdentifier)
             .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
 
-    float[] embedding = getThreadEmbedding(threadCreateDTO);
+    //    float[] embedding = getThreadEmbedding(threadCreateDTO);
 
-    if (!ignoreDuplicates) {
-      checkDuplicationInTrendingThreads(embedding);
-      checkDuplicateInThreadArchive(embedding, 0.95, Limit.of(3));
-    }
+    //    if (!ignoreDuplicates) {
+    //      checkDuplicationInTrendingThreads(embedding);
+    //      checkDuplicateInThreadArchive(embedding, 0.95, Limit.of(3));
+    //    }
 
-    Thread thread = saveThread(threadCreateDTO, author, embedding);
+    Set<Tag> managedTags = getOrCreateTags(threadCreateDTO.tags());
+    Thread thread = saveThread(threadCreateDTO, author, managedTags);
     return threadMapper.toDTO(thread);
   }
 
@@ -201,6 +216,11 @@ public class ThreadService {
     }
 
     threadMapper.updateThreadFromDto(threadUpdateDTO, thread);
+    if (threadUpdateDTO.tags() != null) {
+      Set<Tag> managedTags = getOrCreateTags(threadUpdateDTO.tags());
+      thread.setTags(managedTags);
+    }
+
     threadRepository.save(thread);
 
     return threadMapper.toDTO(thread);
@@ -315,42 +335,44 @@ public class ThreadService {
     Pageable pageable =
         buildPage(threadSearchDTO.page(), threadSearchDTO.size(), threadSearchDTO.sortBy());
 
-    if (!threadSearchDTO.semanticAiSearch()) {
-      filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
-      Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
-      return threadPage.map(threadMapper::toDTO);
-    }
-
-    float[] embedding = getThreadEmbedding(threadSearchDTO);
-    List<DuplicateThreadDTO> duplicateThreadDTOS;
-
-    duplicateThreadDTOS = findSimilarThreadsInTrending(embedding);
-    if (duplicateThreadDTOS.isEmpty()) {
-      duplicateThreadDTOS = findSimilarThreadsInArchive(embedding, 0.7, Limit.of(100));
-    }
-    if (duplicateThreadDTOS.isEmpty()) {
-      return new PageImpl<>(Collections.emptyList(), pageable, 0);
-    }
-
-    List<UUID> orderedIds = duplicateThreadDTOS.stream().map(DuplicateThreadDTO::threadId).toList();
-
+    //    if (!threadSearchDTO.semanticAiSearch()) {
     filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
-    filterBuilder.and(QThread.thread.id.in(orderedIds));
+    Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
+    return threadPage.map(threadMapper::toDTO);
+    //    }
 
-    Iterable<Thread> filteredIterable = threadRepository.findAll(filterBuilder);
-    List<Thread> filteredThreads = new ArrayList<>();
+    //    float[] embedding = getThreadEmbedding(threadSearchDTO);
+    //    List<DuplicateThreadDTO> duplicateThreadDTOS;
+    //
+    //    duplicateThreadDTOS = findSimilarThreadsInTrending(embedding);
+    //    if (duplicateThreadDTOS.isEmpty()) {
+    //      duplicateThreadDTOS = findSimilarThreadsInArchive(embedding, 0.7, Limit.of(100));
+    //    }
+    //    if (duplicateThreadDTOS.isEmpty()) {
+    //      return new PageImpl<>(Collections.emptyList(), pageable, 0);
+    //    }
 
-    filteredIterable.forEach(filteredThreads::add);
-    filteredThreads.sort(Comparator.comparingInt(t -> orderedIds.indexOf(t.getId())));
-
-    int start = (int) pageable.getOffset();
-    int end = Math.min((start + pageable.getPageSize()), filteredThreads.size());
-
-    List<ThreadDTO> sortedDtos = new ArrayList<>();
-    if (start < filteredThreads.size()) {
-      sortedDtos = filteredThreads.subList(start, end).stream().map(threadMapper::toDTO).toList();
-    }
-
-    return new PageImpl<>(sortedDtos, pageable, filteredThreads.size());
+    //    List<UUID> orderedIds =
+    // duplicateThreadDTOS.stream().map(DuplicateThreadDTO::threadId).toList();
+    //
+    //    filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
+    //    filterBuilder.and(QThread.thread.id.in(orderedIds));
+    //
+    //    Iterable<Thread> filteredIterable = threadRepository.findAll(filterBuilder);
+    //    List<Thread> filteredThreads = new ArrayList<>();
+    //
+    //    filteredIterable.forEach(filteredThreads::add);
+    //    filteredThreads.sort(Comparator.comparingInt(t -> orderedIds.indexOf(t.getId())));
+    //
+    //    int start = (int) pageable.getOffset();
+    //    int end = Math.min((start + pageable.getPageSize()), filteredThreads.size());
+    //
+    //    List<ThreadDTO> sortedDtos = new ArrayList<>();
+    //    if (start < filteredThreads.size()) {
+    //      sortedDtos = filteredThreads.subList(start,
+    // end).stream().map(threadMapper::toDTO).toList();
+    //    }
+    //
+    //    return new PageImpl<>(sortedDtos, pageable, filteredThreads.size());
   }
 }

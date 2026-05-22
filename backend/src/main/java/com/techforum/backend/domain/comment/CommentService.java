@@ -11,6 +11,7 @@ import com.techforum.backend.domain.thread.ThreadRepository;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
 import jakarta.validation.Valid;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,6 +53,12 @@ public class CommentService {
                 .findById(addCommentDTO.parentId())
                 .orElseThrow(CommentNotFoundException::new);
 
+    Comment currentAncestor = parent;
+    while (currentAncestor != null) {
+      commentRepository.incrementReplyCount(currentAncestor.getId());
+      currentAncestor = currentAncestor.getParent();
+    }
+
     Comment comment =
         Comment.builder()
             .author(user)
@@ -60,6 +67,7 @@ public class CommentService {
             .content(addCommentDTO.content())
             .score(0)
             .replyCount(0)
+            .createdAt(Instant.now())
             .build();
     commentRepository.save(comment);
     return commentMapper.toDTO(comment);
@@ -84,6 +92,12 @@ public class CommentService {
                 a ->
                     a.getAuthority().equals("ROLE_ADMIN")
                         || a.getAuthority().equals("ROLE_MODERATOR"));
+
+    Comment currentAncestor = comment.getParent();
+    while (currentAncestor != null) {
+      commentRepository.decrementReplyCount(currentAncestor.getId());
+      currentAncestor = currentAncestor.getParent();
+    }
 
     if (!isAdminOrMod && !comment.getAuthor().getUsername().equals(username)) {
       throw new AccessDeniedException("You don't have permission to delete this comment!");
