@@ -15,7 +15,10 @@ public class UserService {
   public void promoteUser(String id, RoleType role) {
     User user = userRepository.findByIdentifier(id).orElseThrow(UserNotFoundException::new);
 
-    // TODO: check if upgrading or downgrading
+    if (user.getRole().ordinal() > role.ordinal()) {
+      throw new IllegalStateException("Cannot promote to a lower role.");
+    }
+
     user.setRole(role);
   }
 
