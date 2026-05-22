@@ -1,8 +1,11 @@
 package com.techforum.backend.domain.interaction;
 
+import com.techforum.backend.domain.interaction.dtos.BookmarkDTO;
 import com.techforum.backend.domain.interaction.dtos.VoteDTO;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -26,6 +29,13 @@ public class InteractionController {
       @PathVariable UUID threadId, Authentication authentication) {
     interactionService.removeBookmark(threadId, authentication);
     return ResponseEntity.noContent().build();
+  }
+
+  @GetMapping("/bookmarks")
+  public ResponseEntity<Page<BookmarkDTO>> listUserBookmarks(
+      Pageable pageable, Authentication authentication) {
+    Page<BookmarkDTO> bookmarks = interactionService.listUserBookmarks(pageable, authentication);
+    return ResponseEntity.ok(bookmarks);
   }
 
   @PostMapping("/comments/{commentId}/votes")

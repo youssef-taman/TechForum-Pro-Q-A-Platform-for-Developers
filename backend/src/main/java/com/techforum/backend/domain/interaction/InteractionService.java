@@ -5,17 +5,21 @@ import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.comment.Comment;
 import com.techforum.backend.domain.comment.CommentRepository;
+import com.techforum.backend.domain.interaction.dtos.BookmarkDTO;
 import com.techforum.backend.domain.interaction.enums.VoteType;
+import com.techforum.backend.domain.interaction.mappers.BookmarkMapper;
 import com.techforum.backend.domain.thread.Thread;
 import com.techforum.backend.domain.thread.ThreadRepository;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
-import jakarta.transaction.Transactional;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +29,7 @@ public class InteractionService {
   private final ThreadRepository threadRepository;
   private final CommentRepository commentRepository;
   private final VoteRepository voteRepository;
+  private final BookmarkMapper bookmarkMapper;
 
   @Transactional
   public void addBookmark(UUID threadId, Authentication authentication) {
@@ -62,6 +67,20 @@ public class InteractionService {
     bookmarkRepository
         .findByUserIdAndThreadId(user.getId(), threadId)
         .ifPresent(bookmarkRepository::delete);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<BookmarkDTO> listUserBookmarks(Pageable pageable, Authentication authentication) {
+    String currentUserIdentifier = authentication.getName();
+
+    User user =
+        userRepository
+            .findByIdentifier(currentUserIdentifier)
+            .orElseThrow(UserNotFoundException::new);
+
+    return bookmarkRepository
+        .findAllUserBookmarks(user.getId(), pageable)
+        .map(bookmarkMapper::toDTO);
   }
 
   @Transactional
