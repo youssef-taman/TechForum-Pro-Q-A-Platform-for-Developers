@@ -1,8 +1,5 @@
 package com.techforum.backend.domain.user;
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import com.techforum.backend.domain.user.dtos.UserDTO;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
