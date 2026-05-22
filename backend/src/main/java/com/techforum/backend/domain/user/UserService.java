@@ -13,10 +13,11 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class UserService {
   private final UserRepository userRepository;
+  private final UserMapper userMapper;
 
   public Page<UserDTO> listUsers(int page, int size) {
     Pageable pageable = PageRequest.of(page, size, Sort.by("username").ascending());
     Page<User> userPage = userRepository.findAll(pageable);
-    return userPage.map(UserMapper::toDTO);
+    return userPage.map(userMapper::toDTO);
   }
 }
