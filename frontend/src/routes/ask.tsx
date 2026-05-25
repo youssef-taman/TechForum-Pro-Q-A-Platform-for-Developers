@@ -105,7 +105,7 @@ function AskPage() {
               </div>
             </div>
             {showPreview ? (
-              <div className="min-h-[240px] rounded-lg border border-border bg-background p-4">
+              <div className="min-h-60 rounded-lg border border-border bg-background p-4">
                 {body ? <Markdown content={body} /> : <p className="font-code text-xs text-muted-foreground">Nothing to preview yet…</p>}
               </div>
             ) : (
@@ -130,7 +130,7 @@ function AskPage() {
               <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } }}
                 placeholder="add tag and press Enter…"
-                className="min-w-[140px] flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none" />
+                className="min-w-35 flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none" />
             </div>
           </div>
 

@@ -1,39 +1,15 @@
 import React, { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import mermaid from "mermaid";
+import hljs from "highlight.js";
+import "highlight.js/styles/github.css";
 
 export function Markdown({ content }: { content: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    mermaid.initialize({ startOnLoad: false, theme: "default" });
-
-    const nodes = containerRef.current?.querySelectorAll<HTMLElement>("[data-mermaid]") || [];
-    nodes.forEach((el) => {
-      const code = el.getAttribute("data-mermaid") || el.textContent || "";
-      const id = `mermaid-${Math.random().toString(36).slice(2, 9)}`;
-      // mermaid.render returns a promise in v8+
-      try {
-        // @ts-ignore
-        const result = mermaid.render(id, code);
-        if (result && typeof (result as any).then === "function") {
-          (result as any).then((r: any) => {
-            el.innerHTML = r.svg ?? r;
-          }).catch(() => {
-            el.textContent = code;
-          });
-        } else {
-          // synchronous result
-          // @ts-ignore
-          el.innerHTML = (result as any).svg ?? result;
-        }
-      } catch (e) {
-        el.textContent = code;
-      }
-    });
+    // No runtime initialization required anymore (mermaid removed)
+    return;
   }, [content]);
 
   return (
@@ -44,19 +20,23 @@ export function Markdown({ content }: { content: string }) {
           code: ({ className, children, ...props }) => {
             const lang = (className || "").replace("language-", "");
             const codeString = String(children).trim();
-            if (lang === "mermaid") {
-              return (
-                <div className="my-3 overflow-x-auto rounded-lg border border-border bg-surface p-3 font-code text-xs">
-                  <div data-mermaid={codeString} />
-                </div>
-              );
-            }
 
             const isBlock = /language-/.test(className ?? "");
             if (isBlock) {
+              let highlighted = "";
+              try {
+                if (lang && hljs.getLanguage(lang)) {
+                  highlighted = hljs.highlight(codeString, { language: lang }).value;
+                } else {
+                  highlighted = hljs.highlightAuto(codeString).value;
+                }
+              } catch (e) {
+                highlighted = codeString.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+              }
+
               return (
                 <pre className="my-3 overflow-x-auto rounded-lg border border-border bg-surface p-3 font-code text-xs">
-                  <code {...props}>{children}</code>
+                  <code className={className} {...props} dangerouslySetInnerHTML={{ __html: highlighted }} />
                 </pre>
               );
             }

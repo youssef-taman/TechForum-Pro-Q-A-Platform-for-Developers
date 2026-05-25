@@ -42,6 +42,10 @@ export interface StoredUser {
     username: string;
     email: string;
     role: string;
+    // Optional: backend may not include this on every auth response,
+    // but components (e.g. profile.tsx) expect it. Keep optional to
+    // avoid runtime issues when missing.
+    isSuspended?: boolean;
 }
 
 export function saveAuth(token: string, user: StoredUser) {
