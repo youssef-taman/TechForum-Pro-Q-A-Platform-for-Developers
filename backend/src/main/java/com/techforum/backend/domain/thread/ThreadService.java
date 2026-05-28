@@ -3,6 +3,7 @@ package com.techforum.backend.domain.thread;
 import com.querydsl.core.BooleanBuilder;
 import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
+import com.techforum.backend.domain.ai.AiIntegrationService;
 import com.techforum.backend.domain.tag.Tag;
 import com.techforum.backend.domain.tag.TagRepository;
 import com.techforum.backend.domain.tag.dtos.TagDTO;
@@ -30,6 +31,7 @@ public class ThreadService {
   private final UserRepository userRepository;
   private final ThreadMapper threadMapper;
   private final TagRepository tagRepository;
+  private final AiIntegrationService aiIntegrationService;
 
   //  private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
   //    /*
