@@ -11,16 +11,51 @@ import {
     Send,
     MessageSquare,
     Tag,
+    Pencil,
+    Trash2,
+    Bot,
+    Sparkles,
 } from "lucide-react";
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
+import type {ReactElement} from "react";
 import {toast} from "sonner";
 import {StatusBadge} from "@/components/StatusBadge";
 import {Markdown} from "@/components/Markdown";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import {useAuth} from "@/lib/auth-context";
 import type {Thread, Comment, Bookmark as BookmarkType, Page} from "@/types";
+import type {ThreadStatus} from "@/types";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {useNavigate} from "@tanstack/react-router";
 
 export const Route = createFileRoute("/questions/$id")({
+    validateSearch: (search: Record<string, unknown>): {author?: string} => ({
+        author: typeof search.author === "string" ? search.author : undefined,
+    }),
     head: ({params}) => ({meta: [{title: `Question — TechForum Pro`}]}),
     component: QuestionDetail,
 });
@@ -34,12 +69,72 @@ function relativeTime(iso: string) {
     return `${Math.floor(hrs / 24)}d ago`;
 }
 
+type CommentNode = Comment & { replies: CommentNode[] };
+
+function updateCommentTree(
+    nodes: CommentNode[],
+    commentId: string,
+    updater: (comment: CommentNode) => CommentNode,
+): CommentNode[] {
+    return nodes.map((node) =>
+        node.id === commentId
+            ? updater(node)
+            : {...node, replies: updateCommentTree(node.replies, commentId, updater)},
+    );
+}
+
+function removeCommentFromTree(nodes: CommentNode[], commentId: string): CommentNode[] {
+    return nodes
+        .filter((node) => node.id !== commentId)
+        .map((node) => ({...node, replies: removeCommentFromTree(node.replies, commentId)}));
+}
+
+async function loadReplyTree(commentId: string): Promise<CommentNode[]> {
+    const pageSize = 100;
+    const firstPage = await apiFetch<Page<Comment>>(
+        `${API_ENDPOINTS.commentReplies(commentId)}?page=0&size=${pageSize}&sortBy=latest`,
+    );
+
+    const allReplies: Comment[] = [...firstPage.content];
+    for (let page = 1; page < firstPage.totalPages; page += 1) {
+        const data = await apiFetch<Page<Comment>>(
+            `${API_ENDPOINTS.commentReplies(commentId)}?page=${page}&size=${pageSize}&sortBy=latest`,
+        );
+        allReplies.push(...data.content);
+    }
+
+    return Promise.all(
+        allReplies.map(async (reply) => ({
+            ...reply,
+            replies: await loadReplyTree(reply.id),
+        })),
+    );
+}
+
+async function loadCommentTree(threadId: string, page: number) {
+    const pageSize = 10;
+    const data = await apiFetch<Page<Comment>>(
+        `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=latest`,
+    );
+
+    const tree = await Promise.all(
+        data.content.map(async (comment) => ({
+            ...comment,
+            replies: await loadReplyTree(comment.id),
+        })),
+    );
+
+    return {tree, totalPages: data.totalPages};
+}
+
 function QuestionDetail() {
     const {id} = Route.useParams();
+    const {author} = Route.useSearch();
+    const navigate = useNavigate();
     const {isLoggedIn, user} = useAuth();
 
     const [thread, setThread] = useState<Thread | null>(null);
-    const [comments, setComments] = useState<Comment[]>([]);
+    const [comments, setComments] = useState<CommentNode[]>([]);
     const [commentsPage, setCommentsPage] = useState(0);
     const [totalCommentPages, setTotalCommentPages] = useState(1);
     const [loadingThread, setLoadingThread] = useState(true);
@@ -52,14 +147,195 @@ function QuestionDetail() {
     const [votedComments, setVotedComments] = useState<
         Record<string, "UPVOTE" | "DOWNVOTE">
     >({});
+    const [votingComments, setVotingComments] = useState<Record<string, boolean>>({});
+    const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
+    const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+    const [editingCommentContent, setEditingCommentContent] = useState("");
+    const [commentDeleteId, setCommentDeleteId] = useState<string | null>(null);
+    const [savingComment, setSavingComment] = useState(false);
+    const [deletingComment, setDeletingComment] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [editTitle, setEditTitle] = useState("");
+    const [editBody, setEditBody] = useState("");
+    const [editStatus, setEditStatus] = useState<ThreadStatus>("OPEN");
+    const [editTags, setEditTags] = useState<string[]>([]);
+    const [editTagInput, setEditTagInput] = useState("");
+    const [savingThread, setSavingThread] = useState(false);
+    const [deletingThread, setDeletingThread] = useState(false);
 
-    // FIX: use threadExpand if authorName is passed via router state,
-    // otherwise search. This is the correct pattern until backend adds GET /threads/{id}.
+    const role = user?.role?.toUpperCase();
+    const isPrivileged = role === "ADMIN" || role === "MODERATOR";
+    const isThreadOwner = !!user && thread?.authorName === user.username;
+    const canEditThread = isLoggedIn && isThreadOwner;
+    const canDeleteThread = isLoggedIn && (isThreadOwner || isPrivileged);
+
+    const canEditComment = (comment: Comment) =>
+        isLoggedIn && !!user && comment.authorName === user.username;
+    const canDeleteComment = (comment: Comment) =>
+        isLoggedIn && !!user && (comment.authorName === user.username || isPrivileged);
+    const isAiComment = (comment: Comment) =>
+        /(^ai$|\bai\b|assistant|bot|llm|gpt)/i.test(comment.authorName);
+
+    const toggleReplies = (commentId: string) => {
+        setExpandedReplies((current) => ({
+            ...current,
+            [commentId]: !(current[commentId] ?? false),
+        }));
+    };
+
+    const openEditDialog = () => {
+        if (!thread) return;
+        setEditTitle(thread.title);
+        setEditBody(thread.body);
+        setEditStatus(thread.status);
+        setEditTags(thread.tags?.map((tag) => tag.name) ?? []);
+        setEditTagInput("");
+        setEditOpen(true);
+    };
+
+    const addEditTag = () => {
+        const nextTag = editTagInput.trim().toLowerCase();
+        if (!nextTag || editTags.includes(nextTag)) return;
+        setEditTags((current) => [...current, nextTag]);
+        setEditTagInput("");
+    };
+
+    const removeEditTag = (tagName: string) => {
+        setEditTags((current) => current.filter((tag) => tag !== tagName));
+    };
+
+    const saveThread = async () => {
+        if (!thread || !canEditThread) return;
+
+        if (editTitle.trim().length < 8) {
+            toast.error("Title must be at least 8 characters");
+            return;
+        }
+
+        if (editBody.trim().length < 30) {
+            toast.error("Body must be at least 30 characters");
+            return;
+        }
+
+        setSavingThread(true);
+        try {
+            const updated = await apiFetch<Thread>(API_ENDPOINTS.threadById(id), {
+                method: "PATCH",
+                body: JSON.stringify({
+                    title: editTitle.trim(),
+                    body: editBody.trim(),
+                    status: editStatus,
+                    tags: editTags.map((name) => ({name})),
+                }),
+            });
+            setThread(updated);
+            setEditOpen(false);
+            toast.success("Post updated");
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to update post");
+        } finally {
+            setSavingThread(false);
+        }
+    };
+
+    const deleteThread = async () => {
+        if (!thread || !canDeleteThread) return;
+
+        setDeletingThread(true);
+        try {
+            await apiFetch(API_ENDPOINTS.threadById(id), {method: "DELETE"});
+            toast.success("Post deleted");
+            navigate({to: "/"});
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to delete post");
+        } finally {
+            setDeletingThread(false);
+        }
+    };
+
+    const startEditingComment = (comment: Comment) => {
+        setEditingCommentId(comment.id);
+        setEditingCommentContent(comment.content);
+    };
+
+    const saveComment = async () => {
+        if (!editingCommentId) return;
+
+        const trimmed = editingCommentContent.trim();
+        if (trimmed.length < 5) {
+            toast.error("Comment too short");
+            return;
+        }
+
+        setSavingComment(true);
+        try {
+            const updated = await apiFetch<Comment>(
+                API_ENDPOINTS.commentById(editingCommentId),
+                {
+                    method: "PATCH",
+                    body: JSON.stringify(trimmed),
+                },
+            );
+            setComments((prev) =>
+                updateCommentTree(prev, editingCommentId, (comment) => ({
+                    ...comment,
+                    ...updated,
+                    replies: comment.replies,
+                })),
+            );
+            setEditingCommentId(null);
+            setEditingCommentContent("");
+            toast.success("Comment updated");
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to update comment");
+        } finally {
+            setSavingComment(false);
+        }
+    };
+
+    const deleteComment = async () => {
+        if (!commentDeleteId) return;
+
+        setDeletingComment(true);
+        try {
+            await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), {
+                method: "DELETE",
+            });
+            setComments((prev) => removeCommentFromTree(prev, commentDeleteId));
+            toast.success("Comment deleted");
+            setCommentDeleteId(null);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to delete comment");
+        } finally {
+            setDeletingComment(false);
+        }
+    };
+
+    const reloadComments = useCallback(async () => {
+        setLoadingComments(true);
+        try {
+            const data = await loadCommentTree(id, commentsPage);
+            setComments(data.tree);
+            setTotalCommentPages(data.totalPages);
+        } catch {
+            toast.error("Failed to load comments");
+        } finally {
+            setLoadingComments(false);
+        }
+    }, [id, commentsPage]);
+
     useEffect(() => {
         const load = async () => {
             setLoadingThread(true);
             try {
-                // Try search endpoint first (UUID in keyword)
+                if (author) {
+                    setThread(
+                        await apiFetch<Thread>(API_ENDPOINTS.threadExpand(author, id)),
+                    );
+                    return;
+                }
+
                 const searchPage = await apiFetch<Page<Thread>>(
                     `${API_ENDPOINTS.threadSearch}?keyword=${id}&size=5`,
                 );
@@ -69,7 +345,6 @@ function QuestionDetail() {
                     return;
                 }
 
-                // Fallback: scan first 2 pages of latest threads
                 for (const p of [0, 1]) {
                     const pg = await apiFetch<Page<Thread>>(
                         `${API_ENDPOINTS.threads}?page=${p}&size=50&sortBy=latest`,
@@ -89,37 +364,47 @@ function QuestionDetail() {
             }
         };
         load();
-    }, [id]);
+    }, [id, author]);
 
     // FIX: initialise bookmark state from server
     useEffect(() => {
         if (!isLoggedIn) return;
-        apiFetch<Page<BookmarkType>>(
-            `${API_ENDPOINTS.bookmarks}?page=0&size=100`,
-        )
-            .then((data) =>
-                setBookmarked(data.content.some((b) => b.threadId === id)),
-            )
-            .catch(() => {});
+        let cancelled = false;
+
+        const loadBookmarks = async () => {
+            try {
+                const pageSize = 100;
+                let page = 0;
+
+                while (!cancelled) {
+                    const data = await apiFetch<Page<BookmarkType>>(
+                        `${API_ENDPOINTS.bookmarks}?page=${page}&size=${pageSize}`,
+                    );
+                    if (data.content.some((b) => b.threadId === id)) {
+                        if (!cancelled) setBookmarked(true);
+                        return;
+                    }
+
+                    if (page >= data.totalPages - 1) break;
+                    page += 1;
+                }
+
+                if (!cancelled) setBookmarked(false);
+            } catch {
+                if (!cancelled) setBookmarked(false);
+            }
+        };
+
+        loadBookmarks();
+
+        return () => {
+            cancelled = true;
+        };
     }, [id, isLoggedIn]);
 
     useEffect(() => {
-        const load = async () => {
-            setLoadingComments(true);
-            try {
-                const data = await apiFetch<Page<Comment>>(
-                    `${API_ENDPOINTS.comments(id)}?page=${commentsPage}&size=10&sortBy=latest`,
-                );
-                setComments(data.content);
-                setTotalCommentPages(data.totalPages);
-            } catch {
-                toast.error("Failed to load comments");
-            } finally {
-                setLoadingComments(false);
-            }
-        };
-        load();
-    }, [id, commentsPage]);
+        void reloadComments();
+    }, [reloadComments]);
 
     const handleBookmark = async () => {
         if (!isLoggedIn) {
@@ -168,9 +453,9 @@ function QuestionDetail() {
                     }),
                 },
             );
-            setComments((prev) => [created, ...prev]);
             setNewComment("");
             toast.success("Comment posted");
+            await reloadComments();
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Failed");
         } finally {
@@ -200,10 +485,7 @@ function QuestionDetail() {
             setReplyingTo(null);
             setReplyText("");
             toast.success("Reply posted");
-            const data = await apiFetch<Page<Comment>>(
-                `${API_ENDPOINTS.comments(id)}?page=${commentsPage}&size=10&sortBy=latest`,
-            );
-            setComments(data.content);
+            await reloadComments();
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Failed");
         }
@@ -218,25 +500,234 @@ function QuestionDetail() {
             toast.error("Please log in to vote");
             return;
         }
+        if (votingComments[commentId]) return;
+
         const prev = votedComments[commentId];
         if (prev === type) return; // already voted this way
+
+        const nextVote = type;
+        const prevVote = prev ?? null;
+
+        setVotingComments((current) => ({...current, [commentId]: true}));
+        setVotedComments((current) => ({...current, [commentId]: nextVote}));
+        setComments((current) =>
+            updateCommentTree(current, commentId, (comment) => {
+                const previousDelta = prevVote ? (prevVote === "UPVOTE" ? 1 : -1) : 0;
+                const nextDelta = nextVote === "UPVOTE" ? 1 : -1;
+                return {
+                    ...comment,
+                    score: comment.score - previousDelta + nextDelta,
+                };
+            }),
+        );
+
         try {
             await apiFetch(API_ENDPOINTS.voteComment(commentId), {
                 method: "POST",
                 body: JSON.stringify({type}),
             });
-            setVotedComments((v) => ({...v, [commentId]: type}));
-            setComments((cs) =>
-                cs.map((c) => {
-                    if (c.id !== commentId) return c;
-                    const delta = type === "UPVOTE" ? 1 : -1;
-                    const undoPrev = prev ? (prev === "UPVOTE" ? -1 : 1) : 0;
-                    return {...c, score: c.score + delta + undoPrev};
+        } catch (err) {
+            // rollback optimistic update
+            setVotedComments((current) => ({
+                ...current,
+                [commentId]: prevVote ?? undefined,
+            }));
+            setComments((current) =>
+                updateCommentTree(current, commentId, (comment) => {
+                    const rollbackDelta = nextVote === "UPVOTE" ? -1 : 1;
+                    const restorePrevDelta = prevVote ? (prevVote === "UPVOTE" ? 1 : -1) : 0;
+                    return {
+                        ...comment,
+                        score: comment.score + rollbackDelta + restorePrevDelta,
+                    };
                 }),
             );
-        } catch {
-            toast.error("Vote failed");
+
+            toast.error(err instanceof Error ? err.message : "Vote failed");
+        } finally {
+            setVotingComments((current) => ({...current, [commentId]: false}));
         }
+    };
+
+    const renderCommentNode = (comment: CommentNode, depth = 0): ReactElement => {
+        const myVote = votedComments[comment.id];
+        const isEditing = editingCommentId === comment.id;
+        const aiComment = isAiComment(comment);
+
+        return (
+            <div
+                key={comment.id}
+                className={`rounded-xl p-4 shadow-sm transition-all ${
+                    aiComment
+                        ? "border border-cyan-500/30 bg-linear-to-br from-cyan-500/10 via-card to-emerald-500/5 shadow-cyan-500/10"
+                        : "border border-border bg-card"
+                } ${depth > 0 ? "ml-6 border-l-2 border-border/70 pl-4" : ""}`}
+            >
+                <div className="flex items-start gap-3">
+                    {aiComment ? (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-500">
+                            <Bot className="h-5 w-5" />
+                        </div>
+                    ) : (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-muted-foreground">
+                            <UserIcon className="h-4 w-4" />
+                        </div>
+                    )}
+                    <div className="flex flex-col items-center gap-1 pt-0.5">
+                        <button
+                            onClick={() => handleVote(comment.id, "UPVOTE")}
+                            disabled={votingComments[comment.id]}
+                            className={`rounded p-0.5 transition-colors ${myVote === "UPVOTE" ? "text-neon" : "text-muted-foreground hover:text-neon"} disabled:cursor-not-allowed disabled:opacity-50`}
+                            aria-label="Upvote"
+                        >
+                            <ChevronUp className="h-4 w-4" />
+                        </button>
+                        <span
+                            className={`font-code text-xs font-bold ${comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"}`}
+                        >
+                            {comment.score}
+                        </span>
+                        <button
+                            onClick={() => handleVote(comment.id, "DOWNVOTE")}
+                            disabled={votingComments[comment.id]}
+                            className={`rounded p-0.5 transition-colors ${myVote === "DOWNVOTE" ? "text-destructive" : "text-muted-foreground hover:text-destructive"} disabled:cursor-not-allowed disabled:opacity-50`}
+                            aria-label="Downvote"
+                        >
+                            <ChevronDown className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 font-code text-[11px]">
+                            <span className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}>
+                                @{comment.authorName}
+                            </span>
+                            {aiComment && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-500">
+                                    <Sparkles className="h-3 w-3" />
+                                    AI suggested
+                                </span>
+                            )}
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="text-muted-foreground">
+                                {relativeTime(comment.createdAt)}
+                            </span>
+                            {comment.replyCount > 0 && (
+                                <span className="text-muted-foreground/60">
+                                    {comment.replyCount} replies
+                                </span>
+                            )}
+                            {comment.parentId && (
+                                <span className="rounded bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground">
+                                    reply
+                                </span>
+                            )}
+                            {(canEditComment(comment) || canDeleteComment(comment)) && (
+                                <span className="ml-auto flex items-center gap-1.5">
+                                    {canEditComment(comment) && (
+                                        <button
+                                            onClick={() => startEditingComment(comment)}
+                                            className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
+                                        >
+                                            Edit
+                                        </button>
+                                    )}
+                                    {canDeleteComment(comment) && (
+                                        <button
+                                            onClick={() => setCommentDeleteId(comment.id)}
+                                            className="rounded-md border border-destructive/30 px-2 py-0.5 text-[10px] text-destructive transition-colors hover:bg-destructive/10"
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
+                                </span>
+                            )}
+                        </div>
+                        {isEditing ? (
+                            <div className="mt-2 space-y-2">
+                                <textarea
+                                    rows={4}
+                                    value={editingCommentContent}
+                                    onChange={(e) => setEditingCommentContent(e.target.value)}
+                                    className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-code text-xs leading-relaxed focus:border-neon focus:outline-none"
+                                />
+                                <div className="flex items-center justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditingCommentId(null);
+                                            setEditingCommentContent("");
+                                        }}
+                                        className="rounded-lg border border-border px-3 py-1.5 font-code text-xs text-muted-foreground hover:border-neon hover:text-neon"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={saveComment}
+                                        disabled={savingComment}
+                                        className="rounded-lg bg-primary px-3 py-1.5 font-code text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                                    >
+                                        {savingComment ? "Saving…" : "Save"}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="mt-1.5 text-sm leading-relaxed text-foreground">
+                                {comment.content}
+                            </p>
+                        )}
+                        {isLoggedIn && (
+                            <button
+                                onClick={() =>
+                                    setReplyingTo(
+                                        replyingTo === comment.id ? null : comment.id,
+                                    )
+                                }
+                                className="mt-2 font-code text-[11px] text-muted-foreground hover:text-neon"
+                            >
+                                {replyingTo === comment.id ? "Cancel" : "↳ Reply"}
+                            </button>
+                        )}
+                        {replyingTo === comment.id && (
+                            <div className="mt-2 flex gap-2">
+                                <input
+                                    value={replyText}
+                                    onChange={(e) => setReplyText(e.target.value)}
+                                    placeholder="Write a reply…"
+                                    className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 font-code text-xs focus:border-neon focus:outline-none"
+                                />
+                                <button
+                                    onClick={() => submitReply(comment.id)}
+                                    className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground hover:opacity-90"
+                                >
+                                    <Send className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        )}
+
+                        {comment.replies.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleReplies(comment.id)}
+                                    className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 font-code text-[11px] text-muted-foreground transition-colors hover:border-neon/50 hover:text-neon"
+                                >
+                                    {depth === 0 || expandedReplies[comment.id]
+                                        ? `Hide replies (${comment.replies.length})`
+                                        : `See more replies (${comment.replies.length})`}
+                                </button>
+
+                                {(depth === 0 || expandedReplies[comment.id]) &&
+                                    comment.replies.map((reply) =>
+                                        renderCommentNode(reply, depth + 1),
+                                    )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     if (loadingThread) {
@@ -278,13 +769,15 @@ function QuestionDetail() {
                     <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={thread.status} />
                         {thread.tags?.map((tag) => (
-                            <span
+                            <Link
                                 key={tag.id}
-                                className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-0.5 font-code text-[10px] text-muted-foreground"
+                                to="/tags/$tag"
+                                params={{tag: tag.name}}
+                                className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-0.5 font-code text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
                             >
                                 <Tag className="h-2.5 w-2.5" />
                                 {tag.name}
-                            </span>
+                            </Link>
                         ))}
                     </div>
 
@@ -308,7 +801,25 @@ function QuestionDetail() {
                             <Clock className="h-3 w-3" />
                             <span>{relativeTime(thread.createdAt)}</span>
                         </div>
-                        <div className="ml-auto flex items-center gap-2">
+                        <div className="ml-auto flex flex-wrap items-center gap-2">
+                            {canEditThread && (
+                                <button
+                                    onClick={openEditDialog}
+                                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-all hover:border-neon/40 hover:text-neon"
+                                >
+                                    <Pencil className="h-3 w-3" />
+                                    Edit
+                                </button>
+                            )}
+                            {canDeleteThread && (
+                                <button
+                                    onClick={() => setDeleteOpen(true)}
+                                    className="flex items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs text-destructive transition-all hover:bg-destructive/10"
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                    Delete
+                                </button>
+                            )}
                             <button
                                 onClick={handleBookmark}
                                 className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-all ${
@@ -338,6 +849,145 @@ function QuestionDetail() {
 
                 {/* Comments */}
                 <div>
+
+                <Dialog
+                    open={editOpen}
+                    onOpenChange={(open) => {
+                        setEditOpen(open);
+                        if (!open) {
+                            setEditTagInput("");
+                        }
+                    }}
+                >
+                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Edit post</DialogTitle>
+                            <DialogDescription>
+                                Update the title, body, status, and tags for this thread.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-5">
+                            <div>
+                                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
+                                    title
+                                </label>
+                                <input
+                                    value={editTitle}
+                                    onChange={(e) => setEditTitle(e.target.value)}
+                                    className="w-full rounded-lg border border-border bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
+                                    body
+                                </label>
+                                <textarea
+                                    rows={10}
+                                    value={editBody}
+                                    onChange={(e) => setEditBody(e.target.value)}
+                                    className="w-full resize-y rounded-lg border border-border bg-background px-4 py-2.5 font-code text-sm leading-relaxed focus:border-neon focus:outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
+                                    status
+                                </label>
+                                <Select value={editStatus} onValueChange={(value) => setEditStatus(value as ThreadStatus)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="OPEN">Open</SelectItem>
+                                        <SelectItem value="RESOLVED">Resolved</SelectItem>
+                                        <SelectItem value="CLOSED">Closed</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
+                                    tags
+                                </label>
+                                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background p-2">
+                                    {editTags.map((tag) => (
+                                        <span
+                                            key={tag}
+                                            className="flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 font-code text-[11px] text-neon"
+                                        >
+                                            {tag}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeEditTag(tag)}
+                                                className="hover:text-destructive"
+                                            >
+                                                <span className="sr-only">Remove tag</span>×
+                                            </button>
+                                        </span>
+                                    ))}
+                                    <input
+                                        value={editTagInput}
+                                        onChange={(e) => setEditTagInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" || e.key === ",") {
+                                                e.preventDefault();
+                                                addEditTag();
+                                            }
+                                        }}
+                                        placeholder="add tag and press Enter…"
+                                        className="min-w-35 flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <DialogFooter>
+                            <button
+                                type="button"
+                                onClick={() => setEditOpen(false)}
+                                className="rounded-lg border border-border px-4 py-2 font-code text-sm text-muted-foreground hover:border-neon hover:text-neon"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={saveThread}
+                                disabled={savingThread}
+                                className="rounded-lg bg-primary px-4 py-2 font-code text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                            >
+                                {savingThread ? "Saving…" : "Save changes"}
+                            </button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently remove the thread and all of its comments.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={deletingThread}>
+                                Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                disabled={deletingThread}
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    deleteThread();
+                                }}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                {deletingThread ? "Deleting…" : "Delete post"}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
                     <h2 className="mb-3 flex items-center gap-2 font-code text-sm font-semibold text-foreground">
                         <MessageSquare className="h-4 w-4 text-neon" />
                         <span className="text-muted-foreground">~/</span>
@@ -355,12 +1005,27 @@ function QuestionDetail() {
                         <div className="space-y-2.5">
                             {comments.map((comment) => {
                                 const myVote = votedComments[comment.id];
+                                const isEditing = editingCommentId === comment.id;
+                                const aiComment = isAiComment(comment);
                                 return (
                                     <div
                                         key={comment.id}
-                                        className="rounded-xl border border-border bg-card p-4 shadow-sm"
+                                        className={`rounded-xl p-4 shadow-sm transition-all ${
+                                            aiComment
+                                                ? "border border-cyan-500/30 bg-linear-to-br from-cyan-500/10 via-card to-emerald-500/5 shadow-cyan-500/10"
+                                                : "border border-border bg-card"
+                                        }`}
                                     >
                                         <div className="flex items-start gap-3">
+                                            {aiComment ? (
+                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-500">
+                                                    <Bot className="h-5 w-5" />
+                                                </div>
+                                            ) : (
+                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-muted-foreground">
+                                                    <UserIcon className="h-4 w-4" />
+                                                </div>
+                                            )}
                                             {/* FIX: Both upvote AND downvote wired */}
                                             <div className="flex flex-col items-center gap-1 pt-0.5">
                                                 <button
@@ -396,9 +1061,15 @@ function QuestionDetail() {
 
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-2 font-code text-[11px]">
-                                                    <span className="font-medium text-neon">
+                                                    <span className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}>
                                                         @{comment.authorName}
                                                     </span>
+                                                    {aiComment && (
+                                                        <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-500">
+                                                            <Sparkles className="h-3 w-3" />
+                                                            AI suggested
+                                                        </span>
+                                                    )}
                                                     <span className="text-muted-foreground/40">
                                                         ·
                                                     </span>
@@ -418,10 +1089,65 @@ function QuestionDetail() {
                                                             reply
                                                         </span>
                                                     )}
+                                                    {(canEditComment(comment) || canDeleteComment(comment)) && (
+                                                        <span className="ml-auto flex items-center gap-1.5">
+                                                            {canEditComment(comment) && (
+                                                                <button
+                                                                    onClick={() => startEditingComment(comment)}
+                                                                    className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                            )}
+                                                            {canDeleteComment(comment) && (
+                                                                <button
+                                                                    onClick={() => setCommentDeleteId(comment.id)}
+                                                                    className="rounded-md border border-destructive/30 px-2 py-0.5 text-[10px] text-destructive transition-colors hover:bg-destructive/10"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            )}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                <p className="mt-1.5 text-sm leading-relaxed text-foreground">
-                                                    {comment.content}
-                                                </p>
+                                                {isEditing ? (
+                                                    <div className="mt-2 space-y-2">
+                                                        <textarea
+                                                            rows={4}
+                                                            value={editingCommentContent}
+                                                            onChange={(e) =>
+                                                                setEditingCommentContent(
+                                                                    e.target.value,
+                                                                )
+                                                            }
+                                                            className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-code text-xs leading-relaxed focus:border-neon focus:outline-none"
+                                                        />
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setEditingCommentId(null);
+                                                                    setEditingCommentContent("");
+                                                                }}
+                                                                className="rounded-lg border border-border px-3 py-1.5 font-code text-xs text-muted-foreground hover:border-neon hover:text-neon"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={saveComment}
+                                                                disabled={savingComment}
+                                                                className="rounded-lg bg-primary px-3 py-1.5 font-code text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                                                            >
+                                                                {savingComment ? "Saving…" : "Save"}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="mt-1.5 text-sm leading-relaxed text-foreground">
+                                                        {comment.content}
+                                                    </p>
+                                                )}
                                                 {isLoggedIn && (
                                                     <button
                                                         onClick={() =>
@@ -472,6 +1198,37 @@ function QuestionDetail() {
                             })}
                         </div>
                     )}
+
+                    <AlertDialog
+                        open={commentDeleteId !== null}
+                        onOpenChange={(open) => {
+                            if (!open) setCommentDeleteId(null);
+                        }}
+                    >
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete this comment?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will permanently remove the comment and cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel disabled={deletingComment}>
+                                    Cancel
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                    disabled={deletingComment}
+                                    onClick={(event) => {
+                                        event.preventDefault();
+                                        deleteComment();
+                                    }}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                    {deletingComment ? "Deleting…" : "Delete comment"}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
                     {totalCommentPages > 1 && (
                         <div className="mt-4 flex items-center justify-center gap-2 font-code text-xs">
@@ -596,12 +1353,14 @@ function QuestionDetail() {
                                 </dt>
                                 <dd className="mt-1.5 flex flex-wrap gap-1">
                                     {thread.tags.map((tag) => (
-                                        <span
+                                        <Link
                                             key={tag.id}
-                                            className="rounded border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground"
+                                            to="/tags/$tag"
+                                            params={{tag: tag.name}}
+                                            className="rounded border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
                                         >
                                             {tag.name}
-                                        </span>
+                                        </Link>
                                     ))}
                                 </dd>
                             </div>

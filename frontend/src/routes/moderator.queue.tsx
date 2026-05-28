@@ -144,6 +144,7 @@ function ModQueue() {
                                         <Link
                                             to="/questions/$id"
                                             params={{id: item.id}}
+                                            search={{author: item.authorName}}
                                             className="mt-2 block"
                                         >
                                             <h3 className="line-clamp-1 text-sm font-semibold text-foreground hover:text-neon">

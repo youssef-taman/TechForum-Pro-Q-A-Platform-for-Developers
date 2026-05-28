@@ -19,6 +19,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as QuestionsIdRouteImport } from './routes/questions.$id'
 import { Route as ModeratorQueueRouteImport } from './routes/moderator.queue'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as TagsRouteImport } from './routes/tags'
+import { Route as TagsTagRouteImport } from './routes/tags.$tag'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -70,6 +72,16 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const TagsRoute = TagsRouteImport.update({
+  id: '/tags',
+  path: '/tags',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TagsTagRoute = TagsTagRouteImport.update({
+  id: '/tags/$tag',
+  path: '/tags/$tag',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +94,8 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute
   '/moderator/queue': typeof ModeratorQueueRoute
   '/questions/$id': typeof QuestionsIdRoute
+  '/tags': typeof TagsRoute
+  '/tags/$tag': typeof TagsTagRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +108,8 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute
   '/moderator/queue': typeof ModeratorQueueRoute
   '/questions/$id': typeof QuestionsIdRoute
+  '/tags': typeof TagsRoute
+  '/tags/$tag': typeof TagsTagRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +123,8 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRoute
   '/moderator/queue': typeof ModeratorQueueRoute
   '/questions/$id': typeof QuestionsIdRoute
+  '/tags': typeof TagsRoute
+  '/tags/$tag': typeof TagsTagRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -121,6 +139,8 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/moderator/queue'
     | '/questions/$id'
+    | '/tags'
+    | '/tags/$tag'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +153,8 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/moderator/queue'
     | '/questions/$id'
+    | '/tags'
+    | '/tags/$tag'
   id:
     | '__root__'
     | '/'
@@ -145,6 +167,8 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/moderator/queue'
     | '/questions/$id'
+    | '/tags'
+    | '/tags/$tag'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -157,6 +181,8 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   ModeratorQueueRoute: typeof ModeratorQueueRoute
   QuestionsIdRoute: typeof QuestionsIdRoute
+  TagsRoute: typeof TagsRoute
+  TagsTagRoute: typeof TagsTagRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -224,6 +250,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ModeratorQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tags': {
+      id: '/tags'
+      path: '/tags'
+      fullPath: '/tags'
+      preLoaderRoute: typeof TagsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tags/$tag': {
+      id: '/tags/$tag'
+      path: '/tags/$tag'
+      fullPath: '/tags/$tag'
+      preLoaderRoute: typeof TagsTagRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/users': {
       id: '/admin/users'
       path: '/users'
@@ -254,6 +294,8 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   ModeratorQueueRoute: ModeratorQueueRoute,
   QuestionsIdRoute: QuestionsIdRoute,
+  TagsRoute: TagsRoute,
+  TagsTagRoute: TagsTagRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

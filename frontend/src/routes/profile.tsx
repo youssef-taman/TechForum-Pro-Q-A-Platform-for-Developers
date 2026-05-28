@@ -180,6 +180,7 @@ function ProfilePage() {
                                     key={t.id}
                                     to="/questions/$id"
                                     params={{id: t.id}}
+                                    search={{author: t.authorName}}
                                     className="flex items-start justify-between gap-3 rounded-lg border border-border bg-surface p-3 transition-all hover:border-neon/30"
                                 >
                                     <div className="min-w-0 flex-1">

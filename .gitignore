@@ -38,3 +38,9 @@ build/
 
 ### ENV Secret Data ###
 .env
+
+### React ###
+node_modules/
+dist/
+build/
+.vite/

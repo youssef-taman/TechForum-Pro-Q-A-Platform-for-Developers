@@ -12,6 +12,14 @@ import {StatusBadge} from "@/components/StatusBadge";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import type {Thread, ThreadStatus, Page} from "@/types";
 import {toast} from "sonner";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {Checkbox} from "@/components/ui/checkbox";
 
 export const Route = createFileRoute("/")({
     validateSearch: (search: Record<string, unknown>): {q?: string} => ({
@@ -49,6 +57,13 @@ function HomePage() {
     const [page, setPage] = useState(0);
     const [search, setSearch] = useState(q ?? "");
     const [debouncedSearch, setDebouncedSearch] = useState(q ?? "");
+    const [sortBy, setSortBy] = useState("latest");
+    const [authorFilter, setAuthorFilter] = useState("");
+    const [minComments, setMinComments] = useState("");
+    const [maxComments, setMaxComments] = useState("");
+    const [fromFilter, setFromFilter] = useState("");
+    const [toFilter, setToFilter] = useState("");
+    const [semanticAiSearch, setSemanticAiSearch] = useState(false);
     const [threadsPage, setThreadsPage] = useState<Page<Thread> | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -63,19 +78,27 @@ function HomePage() {
             const params = new URLSearchParams({
                 page: String(page),
                 size: String(PAGE_SIZE),
-                sortBy: "latest",
+                sortBy,
             });
-            // FIX: statusFilter is already uppercase — no .toUpperCase() needed
             if (statusFilter !== "all") params.set("status", statusFilter);
             if (activeTags.length)
                 activeTags.forEach((t) => params.append("tags", t));
+            if (authorFilter.trim()) params.set("author", authorFilter.trim());
+            if (minComments.trim())
+                params.set("minCommentsNumber", minComments.trim());
+            if (maxComments.trim())
+                params.set("maxCommentsNumber", maxComments.trim());
+            if (fromFilter.trim())
+                params.set("from", new Date(fromFilter).toISOString());
+            if (toFilter.trim())
+                params.set("to", new Date(toFilter).toISOString());
+            if (semanticAiSearch) params.set("semanticAiSearch", "true");
 
-            const url = debouncedSearch.trim()
-                ? (() => {
-                      params.set("keyword", debouncedSearch.trim());
-                      return `${API_ENDPOINTS.threadSearch}?${params}`;
-                  })()
-                : `${API_ENDPOINTS.threads}?${params}`;
+            if (debouncedSearch.trim()) {
+                params.set("keyword", debouncedSearch.trim());
+            }
+
+            const url = `${API_ENDPOINTS.threadSearch}?${params}`;
 
             setThreadsPage(await apiFetch<Page<Thread>>(url));
         } catch {
@@ -83,7 +106,22 @@ function HomePage() {
         } finally {
             setLoading(false);
         }
-    }, [page, statusFilter, activeTags, debouncedSearch]);
+    }, [page, statusFilter, activeTags, debouncedSearch, sortBy, authorFilter, minComments, maxComments, fromFilter, toFilter, semanticAiSearch]);
+
+    const resetFilters = () => {
+        setStatusFilter("all");
+        setActiveTags([]);
+        setSortBy("latest");
+        setAuthorFilter("");
+        setMinComments("");
+        setMaxComments("");
+        setFromFilter("");
+        setToFilter("");
+        setSemanticAiSearch(false);
+        setSearch("");
+        setDebouncedSearch("");
+        setPage(0);
+    };
 
     useEffect(() => {
         fetchThreads();
@@ -107,7 +145,58 @@ function HomePage() {
     }, [threads]);
 
     return (
-        <div className="grid gap-6 lg:grid-cols-[200px_1fr_240px]">
+        <div className="space-y-6">
+            <section className="hero-sheen glass-panel rounded-3xl p-6 shadow-sm sm:p-8">
+                <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+                    <div className="relative">
+                        <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-neon/25 bg-neon/10 px-3 py-1 font-code text-[11px] font-medium text-neon">
+                            <span className="h-1.5 w-1.5 rounded-full bg-neon" />
+                            Developer Q&A, designed for speed
+                        </p>
+                        <h1 className="max-w-2xl text-3xl font-bold leading-tight text-foreground sm:text-4xl lg:text-5xl">
+                            Find answers faster. Ask better questions. Share knowledge with clarity.
+                        </h1>
+                        <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                            Search by topic, author, tags, dates, or engagement signals. The feed is tuned for people who want a clean, fast, and professional developer workspace.
+                        </p>
+                        <div className="mt-6 flex flex-wrap gap-3">
+                            <Link
+                                to="/ask"
+                                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-code text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                            >
+                                <MessageSquare className="h-4 w-4" />
+                                Ask a question
+                            </Link>
+                            <Link
+                                to="/tags"
+                                className="inline-flex items-center gap-2 rounded-xl border border-border bg-background/70 px-4 py-2.5 font-code text-sm font-medium text-muted-foreground transition-colors hover:border-neon hover:text-neon"
+                            >
+                                <Award className="h-4 w-4" />
+                                Explore tags
+                            </Link>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                        {[
+                            {label: "Threads", value: totalElements.toLocaleString()},
+                            {label: "Active filters", value: String((statusFilter !== "all" ? 1 : 0) + activeTags.length + (authorFilter.trim() ? 1 : 0) + (minComments.trim() ? 1 : 0) + (maxComments.trim() ? 1 : 0) + (fromFilter.trim() ? 1 : 0) + (toFilter.trim() ? 1 : 0) + (semanticAiSearch ? 1 : 0))},
+                            {label: "Popular tags", value: String(visibleTags.slice(0, 15).length)},
+                        ].map((stat) => (
+                            <div key={stat.label} className="rounded-2xl border border-border/70 bg-background/70 p-4 backdrop-blur-sm">
+                                <p className="font-code text-[11px] uppercase tracking-widest text-muted-foreground">
+                                    {stat.label}
+                                </p>
+                                <p className="mt-2 text-2xl font-bold text-foreground">
+                                    {stat.value}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            <div className="grid gap-6 lg:grid-cols-[200px_1fr_240px]">
             {/* ── Left sidebar ── */}
             <aside className="space-y-5">
                 {/* Status filter */}
@@ -229,6 +318,132 @@ function HomePage() {
                     />
                 </div>
 
+                <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="space-y-1.5">
+                        <label className="font-code text-[10px] uppercase tracking-widest text-muted-foreground">
+                            Sort
+                        </label>
+                        <Select
+                            value={sortBy}
+                            onValueChange={(value) => {
+                                setSortBy(value);
+                                setPage(0);
+                            }}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Sort threads" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="latest">Latest</SelectItem>
+                                <SelectItem value="top">Most commented</SelectItem>
+                                <SelectItem value="older">Oldest</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="font-code text-[10px] uppercase tracking-widest text-muted-foreground">
+                            Author
+                        </label>
+                        <input
+                            value={authorFilter}
+                            onChange={(e) => {
+                                setAuthorFilter(e.target.value);
+                                setPage(0);
+                            }}
+                            placeholder="Filter by username"
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 font-code text-sm shadow-sm focus:border-neon focus:outline-none"
+                        />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="font-code text-[10px] uppercase tracking-widest text-muted-foreground">
+                            Min comments
+                        </label>
+                        <input
+                            type="number"
+                            min={0}
+                            value={minComments}
+                            onChange={(e) => {
+                                setMinComments(e.target.value);
+                                setPage(0);
+                            }}
+                            placeholder="0"
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 font-code text-sm shadow-sm focus:border-neon focus:outline-none"
+                        />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="font-code text-[10px] uppercase tracking-widest text-muted-foreground">
+                            Max comments
+                        </label>
+                        <input
+                            type="number"
+                            min={0}
+                            value={maxComments}
+                            onChange={(e) => {
+                                setMaxComments(e.target.value);
+                                setPage(0);
+                            }}
+                            placeholder="Any"
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 font-code text-sm shadow-sm focus:border-neon focus:outline-none"
+                        />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="font-code text-[10px] uppercase tracking-widest text-muted-foreground">
+                            From
+                        </label>
+                        <input
+                            type="datetime-local"
+                            value={fromFilter}
+                            onChange={(e) => {
+                                setFromFilter(e.target.value);
+                                setPage(0);
+                            }}
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 font-code text-xs shadow-sm focus:border-neon focus:outline-none"
+                        />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="font-code text-[10px] uppercase tracking-widest text-muted-foreground">
+                            To
+                        </label>
+                        <input
+                            type="datetime-local"
+                            value={toFilter}
+                            onChange={(e) => {
+                                setToFilter(e.target.value);
+                                setPage(0);
+                            }}
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 font-code text-xs shadow-sm focus:border-neon focus:outline-none"
+                        />
+                    </div>
+
+                    <label className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 font-code text-xs text-muted-foreground shadow-sm">
+                        <Checkbox
+                            checked={semanticAiSearch}
+                            onCheckedChange={(checked) => {
+                                setSemanticAiSearch(Boolean(checked));
+                                setPage(0);
+                            }}
+                        />
+                        Semantic AI search
+                    </label>
+                </div>
+
+                {(statusFilter !== "all" || activeTags.length > 0 || sortBy !== "latest" || authorFilter.trim() || minComments.trim() || maxComments.trim() || fromFilter.trim() || toFilter.trim() || semanticAiSearch || search.trim()) && (
+                    <div className="mb-4 flex flex-wrap items-center gap-2 font-code text-[11px] text-muted-foreground">
+                        <span>Active filters</span>
+                        <button
+                            onClick={resetFilters}
+                            className="rounded-full border border-border px-2 py-0.5 text-muted-foreground hover:border-neon hover:text-neon"
+                        >
+                            Reset all
+                        </button>
+                    </div>
+                )}
+
                 {loading ? (
                     <div className="flex items-center justify-center py-24">
                         <div className="flex flex-col items-center gap-3">
@@ -255,6 +470,7 @@ function HomePage() {
                                 key={thread.id}
                                 to="/questions/$id"
                                 params={{id: thread.id}}
+                                search={{author: thread.authorName}}
                                 className="group flex items-start gap-3 rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm transition-all hover:border-neon/40 hover:shadow-md"
                             >
                                 {/* Meta column */}
@@ -270,12 +486,14 @@ function HomePage() {
                                     <div className="flex flex-wrap items-center gap-1.5">
                                         <StatusBadge status={thread.status} />
                                         {thread.tags?.slice(0, 3).map((tag) => (
-                                            <span
+                                            <Link
                                                 key={tag.id}
-                                                className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground"
+                                                to="/tags/$tag"
+                                                params={{tag: tag.name}}
+                                                className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
                                             >
                                                 {tag.name}
-                                            </span>
+                                            </Link>
                                         ))}
                                         {(thread.tags?.length ?? 0) > 3 && (
                                             <span className="font-code text-[10px] text-muted-foreground">
@@ -339,9 +557,10 @@ function HomePage() {
                     </h3>
                     <div className="flex flex-wrap gap-1.5">
                         {visibleTags.slice(0, 15).map((tag) => (
-                            <button
+                            <Link
                                 key={tag}
-                                onClick={() => toggleTag(tag)}
+                                to="/tags/$tag"
+                                params={{tag}}
                                 className={`rounded-md border px-2 py-0.5 font-code text-[10px] transition-all ${
                                     activeTags.includes(tag)
                                         ? "border-neon/40 bg-neon/10 text-neon"
@@ -349,7 +568,7 @@ function HomePage() {
                                 }`}
                             >
                                 {tag}
-                            </button>
+                            </Link>
                         ))}
                     </div>
                 </div>
@@ -381,6 +600,7 @@ function HomePage() {
                     </div>
                 </div>
             </aside>
+            </div>
         </div>
     );
 }

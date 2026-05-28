@@ -101,5 +101,14 @@ export async function apiFetch<T = unknown>(
     }
 
     if (res.status === 204) return null as T;
-    return res.json() as Promise<T>;
+
+    const contentType = res.headers.get("content-type") ?? "";
+    const text = await res.text();
+    if (!text.trim()) return null as T;
+
+    if (contentType.includes("application/json")) {
+        return JSON.parse(text) as T;
+    }
+
+    return text as T;
 }
