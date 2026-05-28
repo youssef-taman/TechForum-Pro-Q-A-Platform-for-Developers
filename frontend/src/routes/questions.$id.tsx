@@ -17,6 +17,7 @@ import {
     Sparkles,
 } from "lucide-react";
 import {useCallback, useEffect, useState} from "react";
+import {VoteButton} from "@/components/ui/vote-button";
 import type {ReactElement} from "react";
 import {toast} from "sonner";
 import {StatusBadge} from "@/components/StatusBadge";
@@ -1132,29 +1133,25 @@ function QuestionDetail() {
                                                     <UserIcon className="h-4 w-4" />
                                                 </div>
                                             )}
-                                            {/* FIX: Both upvote AND downvote wired */}
                                             <div className="flex flex-col items-center gap-2 pt-0.5">
-                                                <button
+                                                {/** owner cannot vote their own comments; visually disable */}
+                                                <VoteButton
+                                                    direction="up"
+                                                    active={myVote === "UPVOTE"}
+                                                    disabled={votingComments[comment.id] || (!!user && comment.authorName === user.username)}
+                                                    ariaLabel="Upvote"
+                                                    title={!!user && comment.authorName === user.username ? "You cannot vote your own comment" : "Upvote"}
                                                     onClick={() => handleVote(comment.id, "UPVOTE")}
-                                                    className={`flex h-8 w-8 items-center justify-center rounded-full border transition-shadow ${myVote === "UPVOTE" ? "bg-neon/10 border-neon text-neon shadow-neon/20" : "border-border text-muted-foreground hover:border-neon hover:text-neon"}`}
-                                                    aria-label="Upvote"
-                                                    title="Upvote"
-                                                    disabled={votingComments[comment.id]}
-                                                    aria-pressed={myVote === "UPVOTE"}
-                                                >
-                                                    <ThumbsUp className="h-4 w-4" />
-                                                </button>
+                                                />
                                                 <span className={`font-code text-sm font-bold ${comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"}`}>{comment.score}</span>
-                                                <button
+                                                <VoteButton
+                                                    direction="down"
+                                                    active={myVote === "DOWNVOTE"}
+                                                    disabled={votingComments[comment.id] || (!!user && comment.authorName === user.username)}
+                                                    ariaLabel="Downvote"
+                                                    title={!!user && comment.authorName === user.username ? "You cannot vote your own comment" : "Downvote"}
                                                     onClick={() => handleVote(comment.id, "DOWNVOTE")}
-                                                    className={`flex h-8 w-8 items-center justify-center rounded-full border transition-shadow ${myVote === "DOWNVOTE" ? "bg-destructive/10 border-destructive text-destructive shadow-destructive/10" : "border-border text-muted-foreground hover:border-destructive hover:text-destructive"}`}
-                                                    aria-label="Downvote"
-                                                    title="Downvote"
-                                                    disabled={votingComments[comment.id]}
-                                                    aria-pressed={myVote === "DOWNVOTE"}
-                                                >
-                                                    <ThumbsDown className="h-4 w-4" />
-                                                </button>
+                                                />
                                             </div>
 
                                             <div className="min-w-0 flex-1">
