@@ -8,7 +8,7 @@ import org.springframework.stereotype.Repository;
 @Repository()
 public interface TagRepository extends JpaRepository<Tag, UUID> {
 
-  boolean existsByNameIgnoreCase(String name);
+  boolean existsByName(String name);
 
-  Optional<Tag> findByNameIgnoreCase(String name);
+  Optional<Tag> findByName(String name);
 }

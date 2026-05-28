@@ -1,60 +1,68 @@
 package com.techforum.backend.domain.thread;
 
-import java.util.Collection;
+import com.querydsl.core.types.Predicate;
+import com.techforum.backend.domain.thread.dtos.DuplicateThreadDTO;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.NonNull;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.querydsl.QuerydslPredicateExecutor;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface ThreadRepository extends JpaRepository<Thread, UUID> {
+public interface ThreadRepository
+    extends JpaRepository<Thread, UUID>, QuerydslPredicateExecutor<Thread> {
 
-  Page<Thread> findByAuthor_Id(UUID authorId, Pageable pageable);
-
-  @Query(
-      value =
-          """
-            SELECT th FROM Thread th
-            JOIN FETCH th.author
-            WHERE LOWER(th.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-               OR LOWER(th.body) LIKE LOWER(CONCAT('%', :keyword, '%'))
-            """,
-      countQuery =
-          """
-            SELECT count(th) FROM Thread th
-            WHERE LOWER(th.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-               OR LOWER(th.body) LIKE LOWER(CONCAT('%', :keyword, '%'))
-            """)
-  Page<Thread> findByTitleOrBody(@Param("keyword") String keyword, Pageable pageable);
-
-  @Query(
-      value =
-          """
-              SELECT th FROM Thread th
-              JOIN FETCH th.author
-              """,
-      countQuery = "SELECT count(th) FROM Thread th")
-  Page<Thread> retrieveAllWithAuthor(Pageable pageable);
-
+  @Override
   @EntityGraph(attributePaths = {"author"})
-  Page<Thread> findByTags_IdIn(Collection<UUID> tagIds, Pageable pageable);
+  Optional<Thread> findById(@NonNull UUID threadId);
+
+  @Override
+  @NonNull
+  @EntityGraph(attributePaths = {"author"})
+  Iterable<Thread> findAll(Predicate predicate);
+
+  @Override
+  @NonNull
+  @EntityGraph(attributePaths = {"author"})
+  Page<Thread> findAll(Predicate predicate, Pageable pageable);
+
+  @EntityGraph(attributePaths = {"author", "tags"})
+  Optional<Thread> findExpandedThreadById(UUID threadId);
 
   @Query(
-      """
-            SELECT e.embedding
-            FROM ThreadEmbedding e
-            WHERE e.thread.id = :thread_id
-    """)
-  float[] getThreadEmbedding(@Param("thread_id") UUID threadId);
+      value =
+          """
+        SELECT e.thread_id AS threadId,
+               u.username AS authorUsername,
+               th.title AS title,
+               ((1 - (e.embedding <=> CAST(:embedding AS VECTOR)))) AS cosineSimilarityScore,
+               th.created_at AS createdAt
+        FROM thread_embeddings e
+        JOIN Threads th ON e.thread_id = th.id
+        JOIN Users u ON u.id = th.user_id
+        WHERE (1 - (e.embedding <=> CAST(:embedding AS VECTOR))) >= :threshold
+        ORDER BY e.embedding <=> CAST(:embedding AS VECTOR) ASC
+        """,
+      nativeQuery = true)
+  List<DuplicateThreadDTO> findDuplicateWithThreshold(
+      @Param("embedding") float[] embedding, @Param("threshold") double threshold, Limit limit);
 
+  @Modifying
   @Query(
-      """
-        SELECT e
-        FROM ThreadEmbedding e
-    """)
-  Page<ThreadEmbedding> getAllThreadEmbeddings(Pageable pageable);
+      value =
+          """
+          INSERT INTO thread_embeddings (thread_id, embedding)
+          VALUES (:#{#thread_embedding.thread.id}, CAST(:#{#thread_embedding.embedding} AS VECTOR))
+    """,
+      nativeQuery = true)
+  void saveThreadEmbedding(@Param("thread_embedding") ThreadEmbedding threadEmbedding);
 }

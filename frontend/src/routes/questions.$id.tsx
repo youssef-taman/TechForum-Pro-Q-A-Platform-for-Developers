@@ -1,8 +1,8 @@
 import {createFileRoute, Link} from "@tanstack/react-router";
 import {
     ArrowLeft,
-    ChevronUp,
-    ChevronDown,
+    ThumbsUp,
+    ThumbsDown,
     Clock,
     User as UserIcon,
     Bookmark,
@@ -83,6 +83,15 @@ function updateCommentTree(
     );
 }
 
+function findCommentNode(nodes: CommentNode[], commentId: string): CommentNode | null {
+    for (const node of nodes) {
+        if (node.id === commentId) return node;
+        const child = findCommentNode(node.replies, commentId);
+        if (child) return child;
+    }
+    return null;
+}
+
 function removeCommentFromTree(nodes: CommentNode[], commentId: string): CommentNode[] {
     return nodes
         .filter((node) => node.id !== commentId)
@@ -117,12 +126,10 @@ async function loadCommentTree(threadId: string, page: number) {
         `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=latest`,
     );
 
-    const tree = await Promise.all(
-        data.content.map(async (comment) => ({
-            ...comment,
-            replies: await loadReplyTree(comment.id),
-        })),
-    );
+    const tree = data.content.map((comment) => ({
+        ...comment,
+        replies: [],
+    }));
 
     return {tree, totalPages: data.totalPages};
 }
@@ -149,6 +156,7 @@ function QuestionDetail() {
     >({});
     const [votingComments, setVotingComments] = useState<Record<string, boolean>>({});
     const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
+    const [loadingReplies, setLoadingReplies] = useState<Record<string, boolean>>({});
     const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
     const [editingCommentContent, setEditingCommentContent] = useState("");
     const [commentDeleteId, setCommentDeleteId] = useState<string | null>(null);
@@ -177,11 +185,32 @@ function QuestionDetail() {
     const isAiComment = (comment: Comment) =>
         /(^ai$|\bai\b|assistant|bot|llm|gpt)/i.test(comment.authorName);
 
-    const toggleReplies = (commentId: string) => {
+    const toggleReplies = async (comment: CommentNode) => {
+        const nextExpanded = !(expandedReplies[comment.id] ?? false);
+
         setExpandedReplies((current) => ({
             ...current,
-            [commentId]: !(current[commentId] ?? false),
+            [comment.id]: nextExpanded,
         }));
+
+        if (!nextExpanded || comment.replyCount === 0 || comment.replies.length > 0) {
+            return;
+        }
+
+        setLoadingReplies((current) => ({...current, [comment.id]: true}));
+        try {
+            const replies = await loadReplyTree(comment.id);
+            setComments((current) =>
+                updateCommentTree(current, comment.id, (node) => ({
+                    ...node,
+                    replies,
+                })),
+            );
+        } catch {
+            toast.error("Failed to load replies");
+        } finally {
+            setLoadingReplies((current) => ({...current, [comment.id]: false}));
+        }
     };
 
     const openEditDialog = () => {
@@ -502,18 +531,59 @@ function QuestionDetail() {
         }
         if (votingComments[commentId]) return;
 
-        const prev = votedComments[commentId];
-        if (prev === type) return; // already voted this way
+        const target = findCommentNode(comments, commentId);
+        if (target && user && target.authorName === user.username) {
+            toast.error("You cannot vote your own comment");
+            return;
+        }
 
-        const nextVote = type;
-        const prevVote = prev ?? null;
+        const prev = votedComments[commentId] ?? null;
 
         setVotingComments((current) => ({...current, [commentId]: true}));
-        setVotedComments((current) => ({...current, [commentId]: nextVote}));
+
+        // If user clicks the same vote again -> unvote
+        if (prev === type) {
+            // optimistic remove
+            setVotedComments((current) => {
+                const copy = {...current};
+                delete copy[commentId];
+                return copy;
+            });
+            setComments((current) =>
+                updateCommentTree(current, commentId, (comment) => ({
+                    ...comment,
+                    score: comment.score - (type === "UPVOTE" ? 1 : -1),
+                })),
+            );
+
+            try {
+                await apiFetch(API_ENDPOINTS.voteComment(commentId), {
+                    method: "POST",
+                    body: JSON.stringify({type}),
+                });
+            } catch (err) {
+                // rollback
+                setVotedComments((current) => ({...current, [commentId]: prev}));
+                setComments((current) =>
+                    updateCommentTree(current, commentId, (comment) => ({
+                        ...comment,
+                        score: comment.score + (type === "UPVOTE" ? 1 : -1),
+                    })),
+                );
+                toast.error(err instanceof Error ? err.message : "Vote failed");
+            } finally {
+                setVotingComments((current) => ({...current, [commentId]: false}));
+            }
+
+            return;
+        }
+
+        // New vote or switching vote
+        setVotedComments((current) => ({...current, [commentId]: type}));
         setComments((current) =>
             updateCommentTree(current, commentId, (comment) => {
-                const previousDelta = prevVote ? (prevVote === "UPVOTE" ? 1 : -1) : 0;
-                const nextDelta = nextVote === "UPVOTE" ? 1 : -1;
+                const previousDelta = prev ? (prev === "UPVOTE" ? 1 : -1) : 0;
+                const nextDelta = type === "UPVOTE" ? 1 : -1;
                 return {
                     ...comment,
                     score: comment.score - previousDelta + nextDelta,
@@ -530,12 +600,12 @@ function QuestionDetail() {
             // rollback optimistic update
             setVotedComments((current) => ({
                 ...current,
-                [commentId]: prevVote ?? undefined,
+                [commentId]: prev ?? undefined,
             }));
             setComments((current) =>
                 updateCommentTree(current, commentId, (comment) => {
-                    const rollbackDelta = nextVote === "UPVOTE" ? -1 : 1;
-                    const restorePrevDelta = prevVote ? (prevVote === "UPVOTE" ? 1 : -1) : 0;
+                    const rollbackDelta = type === "UPVOTE" ? -1 : 1;
+                    const restorePrevDelta = prev ? (prev === "UPVOTE" ? 1 : -1) : 0;
                     return {
                         ...comment,
                         score: comment.score + rollbackDelta + restorePrevDelta,
@@ -573,33 +643,41 @@ function QuestionDetail() {
                             <UserIcon className="h-4 w-4" />
                         </div>
                     )}
-                    <div className="flex flex-col items-center gap-1 pt-0.5">
+                    <div className="flex flex-col items-center gap-2 pt-0.5">
+                        {/** determine ownership to gray-out/disable vote controls */}
+                        {null}
                         <button
                             onClick={() => handleVote(comment.id, "UPVOTE")}
-                            disabled={votingComments[comment.id]}
-                            className={`rounded p-0.5 transition-colors ${myVote === "UPVOTE" ? "text-neon" : "text-muted-foreground hover:text-neon"} disabled:cursor-not-allowed disabled:opacity-50`}
+                            disabled={votingComments[comment.id] || (!!user && comment.authorName === user.username)}
+                            title={!!user && comment.authorName === user.username ? "Cannot vote your own comment" : "Upvote"}
+                            aria-pressed={myVote === "UPVOTE"}
                             aria-label="Upvote"
+                            className={`flex h-8 w-8 items-center justify-center rounded-full border transition-shadow ${myVote === "UPVOTE" ? "bg-neon/10 border-neon text-neon shadow-neon/20" : "border-border text-muted-foreground hover:border-neon hover:text-neon"} ${!!user && comment.authorName === user.username ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
-                            <ChevronUp className="h-4 w-4" />
+                            <ThumbsUp className="h-4 w-4" />
                         </button>
                         <span
-                            className={`font-code text-xs font-bold ${comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"}`}
+                            className={`font-code text-sm font-bold ${comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"}`}
                         >
                             {comment.score}
                         </span>
                         <button
                             onClick={() => handleVote(comment.id, "DOWNVOTE")}
-                            disabled={votingComments[comment.id]}
-                            className={`rounded p-0.5 transition-colors ${myVote === "DOWNVOTE" ? "text-destructive" : "text-muted-foreground hover:text-destructive"} disabled:cursor-not-allowed disabled:opacity-50`}
+                            disabled={votingComments[comment.id] || (!!user && comment.authorName === user.username)}
+                            title={!!user && comment.authorName === user.username ? "Cannot vote your own comment" : "Downvote"}
+                            aria-pressed={myVote === "DOWNVOTE"}
                             aria-label="Downvote"
+                            className={`flex h-8 w-8 items-center justify-center rounded-full border transition-shadow ${myVote === "DOWNVOTE" ? "bg-destructive/10 border-destructive text-destructive shadow-destructive/10" : "border-border text-muted-foreground hover:border-destructive hover:text-destructive"} ${!!user && comment.authorName === user.username ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
-                            <ChevronDown className="h-4 w-4" />
+                            <ThumbsDown className="h-4 w-4" />
                         </button>
                     </div>
 
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 font-code text-[11px]">
-                            <span className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}>
+                            <span
+                                className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}
+                            >
                                 @{comment.authorName}
                             </span>
                             {aiComment && (
@@ -622,11 +700,14 @@ function QuestionDetail() {
                                     reply
                                 </span>
                             )}
-                            {(canEditComment(comment) || canDeleteComment(comment)) && (
+                            {(canEditComment(comment) ||
+                                canDeleteComment(comment)) && (
                                 <span className="ml-auto flex items-center gap-1.5">
                                     {canEditComment(comment) && (
                                         <button
-                                            onClick={() => startEditingComment(comment)}
+                                            onClick={() =>
+                                                startEditingComment(comment)
+                                            }
                                             className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
                                         >
                                             Edit
@@ -634,7 +715,9 @@ function QuestionDetail() {
                                     )}
                                     {canDeleteComment(comment) && (
                                         <button
-                                            onClick={() => setCommentDeleteId(comment.id)}
+                                            onClick={() =>
+                                                setCommentDeleteId(comment.id)
+                                            }
                                             className="rounded-md border border-destructive/30 px-2 py-0.5 text-[10px] text-destructive transition-colors hover:bg-destructive/10"
                                         >
                                             Delete
@@ -648,7 +731,9 @@ function QuestionDetail() {
                                 <textarea
                                     rows={4}
                                     value={editingCommentContent}
-                                    onChange={(e) => setEditingCommentContent(e.target.value)}
+                                    onChange={(e) =>
+                                        setEditingCommentContent(e.target.value)
+                                    }
                                     className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-code text-xs leading-relaxed focus:border-neon focus:outline-none"
                                 />
                                 <div className="flex items-center justify-end gap-2">
@@ -681,19 +766,25 @@ function QuestionDetail() {
                             <button
                                 onClick={() =>
                                     setReplyingTo(
-                                        replyingTo === comment.id ? null : comment.id,
+                                        replyingTo === comment.id
+                                            ? null
+                                            : comment.id,
                                     )
                                 }
                                 className="mt-2 font-code text-[11px] text-muted-foreground hover:text-neon"
                             >
-                                {replyingTo === comment.id ? "Cancel" : "↳ Reply"}
+                                {replyingTo === comment.id
+                                    ? "Cancel"
+                                    : "↳ Reply"}
                             </button>
                         )}
                         {replyingTo === comment.id && (
                             <div className="mt-2 flex gap-2">
                                 <input
                                     value={replyText}
-                                    onChange={(e) => setReplyText(e.target.value)}
+                                    onChange={(e) =>
+                                        setReplyText(e.target.value)
+                                    }
                                     placeholder="Write a reply…"
                                     className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 font-code text-xs focus:border-neon focus:outline-none"
                                 />
@@ -706,22 +797,37 @@ function QuestionDetail() {
                             </div>
                         )}
 
-                        {comment.replies.length > 0 && (
-                            <div className="mt-3 space-y-2">
+                        {comment.replyCount > 0 && (
+                            <div className="mt-3 space-y-2 border-t border-border/70 pt-2">
                                 <button
                                     type="button"
-                                    onClick={() => toggleReplies(comment.id)}
+                                    onClick={() => toggleReplies(comment)}
                                     className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 font-code text-[11px] text-muted-foreground transition-colors hover:border-neon/50 hover:text-neon"
                                 >
-                                    {depth === 0 || expandedReplies[comment.id]
+                                    {expandedReplies[comment.id]
                                         ? `Hide replies (${comment.replies.length})`
-                                        : `See more replies (${comment.replies.length})`}
+                                        : `See more replies (${comment.replies.length || comment.replyCount})`}
                                 </button>
 
-                                {(depth === 0 || expandedReplies[comment.id]) &&
-                                    comment.replies.map((reply) =>
-                                        renderCommentNode(reply, depth + 1),
-                                    )}
+                                {expandedReplies[comment.id] && (
+                                    <div className="space-y-2 pl-3">
+                                        {loadingReplies[comment.id] ? (
+                                            <div className="flex items-center gap-2 font-code text-[11px] text-muted-foreground">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                Loading replies…
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="font-code text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
+                                                    Replies
+                                                </div>
+                                                {comment.replies.map((reply) =>
+                                                    renderCommentNode(reply, depth + 1),
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1027,35 +1133,27 @@ function QuestionDetail() {
                                                 </div>
                                             )}
                                             {/* FIX: Both upvote AND downvote wired */}
-                                            <div className="flex flex-col items-center gap-1 pt-0.5">
+                                            <div className="flex flex-col items-center gap-2 pt-0.5">
                                                 <button
-                                                    onClick={() =>
-                                                        handleVote(
-                                                            comment.id,
-                                                            "UPVOTE",
-                                                        )
-                                                    }
-                                                    className={`rounded p-0.5 transition-colors ${myVote === "UPVOTE" ? "text-neon" : "text-muted-foreground hover:text-neon"}`}
+                                                    onClick={() => handleVote(comment.id, "UPVOTE")}
+                                                    className={`flex h-8 w-8 items-center justify-center rounded-full border transition-shadow ${myVote === "UPVOTE" ? "bg-neon/10 border-neon text-neon shadow-neon/20" : "border-border text-muted-foreground hover:border-neon hover:text-neon"}`}
                                                     aria-label="Upvote"
+                                                    title="Upvote"
+                                                    disabled={votingComments[comment.id]}
+                                                    aria-pressed={myVote === "UPVOTE"}
                                                 >
-                                                    <ChevronUp className="h-4 w-4" />
+                                                    <ThumbsUp className="h-4 w-4" />
                                                 </button>
-                                                <span
-                                                    className={`font-code text-xs font-bold ${comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"}`}
-                                                >
-                                                    {comment.score}
-                                                </span>
+                                                <span className={`font-code text-sm font-bold ${comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"}`}>{comment.score}</span>
                                                 <button
-                                                    onClick={() =>
-                                                        handleVote(
-                                                            comment.id,
-                                                            "DOWNVOTE",
-                                                        )
-                                                    }
-                                                    className={`rounded p-0.5 transition-colors ${myVote === "DOWNVOTE" ? "text-destructive" : "text-muted-foreground hover:text-destructive"}`}
+                                                    onClick={() => handleVote(comment.id, "DOWNVOTE")}
+                                                    className={`flex h-8 w-8 items-center justify-center rounded-full border transition-shadow ${myVote === "DOWNVOTE" ? "bg-destructive/10 border-destructive text-destructive shadow-destructive/10" : "border-border text-muted-foreground hover:border-destructive hover:text-destructive"}`}
                                                     aria-label="Downvote"
+                                                    title="Downvote"
+                                                    disabled={votingComments[comment.id]}
+                                                    aria-pressed={myVote === "DOWNVOTE"}
                                                 >
-                                                    <ChevronDown className="h-4 w-4" />
+                                                    <ThumbsDown className="h-4 w-4" />
                                                 </button>
                                             </div>
 
