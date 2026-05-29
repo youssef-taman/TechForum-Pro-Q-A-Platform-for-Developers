@@ -14,6 +14,18 @@ public class AiIntegrationService {
 
   private final RestTemplate restTemplate;
 
+  public double[] getEmbedding(String text) {
+    var request = new EmbedRequest(text);
+
+    try {
+      var response =
+          restTemplate.postForEntity(aiServiceUrl + "/api/v1/embed", request, EmbedResponse.class);
+      return response.getBody() != null ? response.getBody().embedding() : new double[0];
+    } catch (Exception e) {
+      return new double[0];
+    }
+  }
+
   public String[] getTags(String title, String body) {
     String codeExtracted = extractCode(body);
     String cleanBody = removeCode(body);
@@ -44,6 +56,10 @@ public class AiIntegrationService {
   private String removeCode(String body) {
     return body.replaceAll("<code>[\\s\\S]*?</code>", "").trim();
   }
+
+  record EmbedRequest(String text) {}
+
+  record EmbedResponse(double[] embedding) {}
 
   record TagRequest(String title, String body, String code) {}
 

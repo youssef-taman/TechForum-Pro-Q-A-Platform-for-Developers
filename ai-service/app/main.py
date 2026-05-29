@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.core.models import ModelRegistry
-from app.api.v1 import tagging
+from app.api.v1 import embedding, tagging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -14,7 +14,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-
+app.include_router(embedding.router, prefix="/api/v1", tags=["Duplicate Detection"])
 app.include_router(tagging.router,   prefix="/api/v1", tags=["Tagging"])
 
 @app.get("/health")

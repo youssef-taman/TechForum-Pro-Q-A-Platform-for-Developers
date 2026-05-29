@@ -33,17 +33,11 @@ public class ThreadService {
   private final TagRepository tagRepository;
   private final AiIntegrationService aiIntegrationService;
 
-  //  private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
-  //    /*
-  //    TODO:
-  //        * Connect to python's duplication detection model
-  //        * Using the thread label and body, return the embedding
-  //     */
-  //
-  //    float[] embedding = new float[768];
-  //    //        Thread embedding process
-  //    return embedding;
-  //  }
+  private double[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
+    return aiIntegrationService.getEmbedding(
+            threadCreateDTO.title() + " " + threadCreateDTO.body()
+    );
+  }
 
   //  private float[] getThreadEmbedding(ThreadSearchDTO threadSearchDTO) {
   //    /*
