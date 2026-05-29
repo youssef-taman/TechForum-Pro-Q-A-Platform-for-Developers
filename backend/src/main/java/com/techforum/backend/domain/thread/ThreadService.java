@@ -35,8 +35,7 @@ public class ThreadService {
 
   private double[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
     return aiIntegrationService.getEmbedding(
-            threadCreateDTO.title() + " " + threadCreateDTO.body()
-    );
+        threadCreateDTO.title() + " " + threadCreateDTO.body());
   }
 
   //  private float[] getThreadEmbedding(ThreadSearchDTO threadSearchDTO) {
