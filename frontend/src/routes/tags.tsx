@@ -37,7 +37,7 @@ function TagsExplorer() {
     );
 
     return (
-        <div className="mx-auto max-w-5xl space-y-6">
+        <div className="mx-auto max-w-4xl space-y-6">
             <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                     <Tags className="h-5 w-5 text-primary" />

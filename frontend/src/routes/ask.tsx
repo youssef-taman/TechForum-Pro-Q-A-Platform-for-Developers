@@ -159,7 +159,7 @@ function AskPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_320px]">
+    <div className="mx-auto grid max-w-4xl gap-6 lg:grid-cols-[1fr_320px]">
       <section className="rounded-xl border border-border bg-card p-6">
         <h1 className="font-code text-2xl font-bold">
           <span className="text-muted-foreground">~/</span>ask-question
@@ -323,12 +323,7 @@ function AskPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h2 className="font-code text-sm font-semibold text-foreground">Preview</h2>
-          <div className="mt-3 rounded-lg border border-border bg-background p-4">
-            {body ? <Markdown content={body} /> : <p className="font-code text-xs text-muted-foreground">Nothing to preview yet…</p>}
-          </div>
-        </div>
+        {/* Preview box removed per design — inline preview toggle remains */}
       </aside>
     </div>
   );

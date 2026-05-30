@@ -43,6 +43,7 @@ export function Navbar() {
     const [search, setSearch] = useState("");
     const [mobileOpen, setMobileOpen] = useState(false);
     const [fontMenuOpen, setFontMenuOpen] = useState(false);
+    const [searchFocused, setSearchFocused] = useState(false);
     const {size: fontSize, setSize: setFontSize} = useFontSize();
 
     const role = user?.role?.toUpperCase() ?? "";
@@ -89,44 +90,59 @@ export function Navbar() {
     return (
         <>
             <header className="sticky top-0 z-50 border-b border-border/70 bg-background/85 backdrop-blur-xl">
-                <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6">
+                <div className="mx-auto flex h-20 max-w-7xl items-center gap-4 px-6 sm:px-8">
                     {/* Logo */}
-                    <Link to="/" className="group flex shrink-0 items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-neon/20 bg-neon/10 text-neon shadow-sm transition-all group-hover:scale-105 group-hover:border-neon/35 group-hover:bg-neon/15">
-                            <Code2 className="h-4 w-4" />
+                    <Link
+                        to="/"
+                        className="group flex shrink-0 items-center gap-3"
+                    >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-neon/20 bg-neon/10 text-neon shadow-sm transition-all group-hover:scale-105 group-hover:border-neon/35 group-hover:bg-neon/15">
+                            <Code2 className="h-5 w-5" />
                         </div>
-                        <span className="hidden leading-tight sm:inline">
-                            <span className="block font-code text-sm font-bold tracking-tight text-foreground">
+                        <span className={searchFocused ? "hidden" : "hidden leading-tight sm:inline"}>
+                            <span className="block font-code text-base font-bold tracking-tight text-foreground">
                                 TechForum<span className="text-neon">.pro</span>
                             </span>
-                            <span className="block font-code text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                            <span className="block font-code text-xs uppercase tracking-[0.12em] text-muted-foreground">
                                 developer q&a platform
                             </span>
                         </span>
                     </Link>
 
                     {/* Search (center) */}
-                    <form onSubmit={submitSearch} role="search" aria-label="Search threads and tags" className="relative flex-1 max-w-xl md:block">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <form
+                        onSubmit={submitSearch}
+                        role="search"
+                        aria-label="Search threads and tags"
+                        className="relative flex-1 min-w-0"
+                    >
+                        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
+                            onFocus={() => setSearchFocused(true)}
+                            onBlur={() => setSearchFocused(false)}
                             type="search"
                             placeholder="Search questions, tags, users…"
                             aria-label="Search questions, tags or users"
-                            className="h-10 w-full rounded-full border border-border bg-surface pl-10 pr-3 font-code text-sm text-foreground placeholder:text-muted-foreground/50 shadow-sm transition-colors focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon/20"
+                            className="h-12 w-full rounded-full border border-border bg-surface pl-12 pr-4 font-code text-sm text-foreground placeholder:text-muted-foreground/50 shadow-sm transition-colors focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon/20"
                         />
                     </form>
 
                     {/* Nav links — desktop */}
-                    <nav aria-label="Primary" className="ml-2 hidden items-center gap-1 rounded-full border border-border bg-surface/70 p-1 lg:flex">
+                    <nav
+                        aria-label="Primary"
+                        className="ml-2 hidden items-center gap-2 rounded-full border border-border bg-surface/70 p-2 lg:flex"
+                    >
                         {navLink("/", "Feed", Terminal)}
-                        {isPrivileged && navLink("/moderator/queue", "Queue", ShieldCheck)}
-                        {role === "ADMIN" && navLink("/admin", "Admin", LayoutDashboard)}
+                        {isPrivileged &&
+                            navLink("/moderator/queue", "Queue", ShieldCheck)}
+                        {role === "ADMIN" &&
+                            navLink("/admin", "Admin", LayoutDashboard)}
                     </nav>
 
                     {/* Right actions */}
-                    <div className="ml-auto flex items-center gap-2">
+                    <div className="ml-auto flex items-center gap-3">
                         {/* Font size picker */}
                         <div className="relative hidden sm:block">
                             <Button
@@ -164,52 +180,78 @@ export function Navbar() {
 
                         {/* Ask button */}
                         <Link to="/ask" aria-label="Ask a question">
-                            <Button size="sm" className="flex items-center gap-2 rounded-full bg-neon/90 text-black px-3 py-1.5 shadow-md hover:brightness-95">
+                            <Button
+                                size="sm"
+                                className="flex items-center gap-2 rounded-full bg-neon/90 text-black px-4 py-2 shadow-md hover:brightness-95"
+                            >
                                 <MessageSquare className="h-4 w-4" />
-                                <span className="hidden font-code text-sm font-semibold sm:inline">Ask</span>
+                                <span className={searchFocused ? "hidden" : "hidden font-code text-sm font-semibold sm:inline"}>
+                                    Ask
+                                </span>
                             </Button>
                         </Link>
 
                         {isLoggedIn ? (
                             <div className="hidden items-center gap-2 lg:flex">
-                                {roleBadge && (
-                                    <span title={roleBadge.label} className={`hidden rounded-full border px-2 py-0.5 font-code text-[10px] font-medium lg:inline ${roleBadge.cls}`}>
-                                        {roleBadge.label}
-                                    </span>
-                                )}
+                                {/* role badge removed from header */}
 
                                 <Link to="/bookmarks" title="Bookmarks">
-                                    <Button variant="ghost" size="icon" className="font-code text-xs text-muted-foreground hover:text-foreground">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="font-code text-xs text-muted-foreground hover:text-foreground"
+                                    >
                                         <BookMarked className="h-5 w-5" />
                                     </Button>
                                 </Link>
 
                                 <Link to="/profile" title="Profile & Settings">
-                                    <Button variant="ghost" size="sm" className="gap-2 font-code text-sm">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-2 font-code text-sm"
+                                    >
                                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
-                                            {user?.username?.slice(0, 2).toUpperCase()}
+                                            {user?.username
+                                                ?.slice(0, 2)
+                                                .toUpperCase()}
                                         </div>
-                                        <span className="hidden sm:inline">@{user?.username}</span>
+                                        <span className="hidden sm:inline">
+                                            @{user?.username}
+                                        </span>
                                     </Button>
                                 </Link>
 
-                                <Link to="/profile" title="Settings">
-                                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                                        <Settings className="h-4 w-4" />
-                                    </Button>
-                                </Link>
+                                {/* Settings icon removed from header */}
 
-                                <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-destructive" title="Log out">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleLogout}
+                                    className="text-muted-foreground hover:text-destructive"
+                                    title="Log out"
+                                >
                                     <LogOut className="h-5 w-5" />
                                 </Button>
                             </div>
                         ) : (
                             <div className="hidden items-center gap-2 lg:flex">
                                 <Link to="/login">
-                                    <Button variant="ghost" size="sm" className="font-code text-sm">Login</Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="font-code text-sm"
+                                    >
+                                        Login
+                                    </Button>
                                 </Link>
                                 <Link to="/register">
-                                    <Button size="sm" className="font-code text-sm">Register</Button>
+                                    <Button
+                                        size="sm"
+                                        className="font-code text-sm"
+                                    >
+                                        Register
+                                    </Button>
                                 </Link>
                             </div>
                         )}
@@ -222,7 +264,11 @@ export function Navbar() {
                             onClick={() => setMobileOpen((o) => !o)}
                             aria-label="Toggle menu"
                         >
-                            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                            {mobileOpen ? (
+                                <X className="h-5 w-5" />
+                            ) : (
+                                <Menu className="h-5 w-5" />
+                            )}
                         </Button>
                     </div>
                 </div>
@@ -230,9 +276,12 @@ export function Navbar() {
                 {/* Mobile nav drawer */}
                 {mobileOpen && (
                     <div className="border-t border-border/70 bg-background/95 backdrop-blur-xl lg:hidden">
-                        <div className="mx-auto max-w-7xl space-y-1 px-4 py-3">
+                        <div className="mx-auto max-w-6xl space-y-1 px-4 py-3">
                             {/* Mobile search */}
-                            <form onSubmit={submitSearch} className="relative mb-3">
+                            <form
+                                onSubmit={submitSearch}
+                                className="relative mb-3"
+                            >
                                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <input
                                     value={search}
@@ -246,8 +295,18 @@ export function Navbar() {
                             {/* Nav links */}
                             <div className="flex flex-col gap-1">
                                 {navLink("/", "Feed", Terminal)}
-                                {isPrivileged && navLink("/moderator/queue", "Mod Queue", ShieldCheck)}
-                                {role === "ADMIN" && navLink("/admin", "Admin Dashboard", LayoutDashboard)}
+                                {isPrivileged &&
+                                    navLink(
+                                        "/moderator/queue",
+                                        "Mod Queue",
+                                        ShieldCheck,
+                                    )}
+                                {role === "ADMIN" &&
+                                    navLink(
+                                        "/admin",
+                                        "Admin Dashboard",
+                                        LayoutDashboard,
+                                    )}
                             </div>
 
                             <div className="my-2 border-t border-border/50" />
@@ -255,7 +314,9 @@ export function Navbar() {
                             {/* Font size */}
                             <div className="flex items-center gap-2 px-2.5 py-1.5">
                                 <Type className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-code text-xs text-muted-foreground mr-2">Font</span>
+                                <span className="font-code text-xs text-muted-foreground mr-2">
+                                    Font
+                                </span>
                                 {FONT_SIZES.map((s) => (
                                     <button
                                         key={s}
@@ -277,19 +338,27 @@ export function Navbar() {
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center gap-3 px-2.5 py-2">
                                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
-                                            {user?.username?.slice(0, 2).toUpperCase()}
+                                            {user?.username
+                                                ?.slice(0, 2)
+                                                .toUpperCase()}
                                         </div>
                                         <div>
-                                            <p className="font-code text-sm font-medium text-foreground">@{user?.username}</p>
-                                            {roleBadge && (
-                                                <span className={`inline-flex rounded-full border px-1.5 py-0.5 font-code text-[10px] font-medium ${roleBadge.cls}`}>
-                                                    {roleBadge.label}
-                                                </span>
-                                            )}
+                                            <p className="font-code text-sm font-medium text-foreground">
+                                                @{user?.username}
+                                            </p>
+                                            {/* role badge removed from mobile drawer */}
                                         </div>
                                     </div>
-                                    {navLink("/profile", "Profile & Settings", User)}
-                                    {navLink("/bookmarks", "Bookmarks", BookMarked)}
+                                    {navLink(
+                                        "/profile",
+                                        "Profile & Settings",
+                                        User,
+                                    )}
+                                    {navLink(
+                                        "/bookmarks",
+                                        "Bookmarks",
+                                        BookMarked,
+                                    )}
                                     <button
                                         onClick={handleLogout}
                                         className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-code text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -310,7 +379,10 @@ export function Navbar() {
 
             {/* Close font menu on outside click */}
             {fontMenuOpen && (
-                <div className="fixed inset-0 z-40" onClick={() => setFontMenuOpen(false)} />
+                <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setFontMenuOpen(false)}
+                />
             )}
         </>
     );

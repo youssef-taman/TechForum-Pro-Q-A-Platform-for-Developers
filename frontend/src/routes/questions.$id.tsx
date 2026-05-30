@@ -134,10 +134,14 @@ async function loadReplyTree(commentId: string): Promise<CommentNode[]> {
     );
 }
 
-async function loadCommentTree(threadId: string, page: number) {
+async function loadCommentTree(
+    threadId: string,
+    page: number,
+    sortBy: "latest" | "oldest" | "top" = "latest",
+) {
     const pageSize = 10;
     const data = await apiFetch<Page<Comment>>(
-        `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=latest`,
+        `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=${sortBy}`,
     );
 
     const tree = data.content.map((comment) => ({
@@ -225,17 +229,17 @@ function CommentCard({
     const voteButtonSize = depth === 0 ? "h-7 w-7" : "h-6 w-6";
     const scoreClass = depth === 0 ? "text-sm" : "text-xs";
     const contentClass = depth === 0 ? "" : "";
-    const cardPadding = depth === 0 ? "p-4" : "p-3";
+    const cardPadding = depth === 0 ? "p-6" : "p-4";
 
     return (
         <div
             className={`rounded-xl shadow-sm transition-all ${cardPadding} ${
                 aiComment
-                    ? "border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 via-card to-emerald-500/5 shadow-cyan-500/10"
+                    ? "border border-cyan-500/30 bg-linear-to-br from-cyan-500/10 via-card to-emerald-500/5 shadow-cyan-500/10"
                     : "border border-border bg-card"
             }`}
         >
-            <div className="flex items-start gap-2.5">
+            <div className="flex items-start gap-3">
                 {/* Avatar */}
                 {aiComment ? (
                     <div
@@ -364,7 +368,7 @@ function CommentCard({
 
                     {/* Content or edit form */}
                     {isEditing ? (
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-2 space-y-3">
                             <textarea
                                 rows={4}
                                 value={editingCommentContent}
@@ -468,7 +472,7 @@ function CommentCard({
                                         </p>
                                     ) : (
                                         <div
-                                            className={`space-y-2 border-l-2 pl-3 ${depth === 0 ? "border-neon/20 ml-1" : "border-border/40 ml-0.5"}`}
+                                            className={`space-y-3 border-l-2 pl-3 ${depth === 0 ? "border-neon/20 ml-1" : "border-border/40 ml-0.5"}`}
                                         >
                                             {comment.replies.map((reply) => (
                                                 <CommentCard
@@ -503,6 +507,9 @@ function QuestionDetail() {
     const [thread, setThread] = useState<Thread | null>(null);
     const [comments, setComments] = useState<CommentNode[]>([]);
     const [commentsPage, setCommentsPage] = useState(0);
+    const [commentSort, setCommentSort] = useState<"latest" | "oldest" | "top">(
+        "latest",
+    );
     const [totalCommentPages, setTotalCommentPages] = useState(1);
     const [loadingThread, setLoadingThread] = useState(true);
     const [loadingComments, setLoadingComments] = useState(false);
@@ -720,7 +727,7 @@ function QuestionDetail() {
     const reloadComments = useCallback(async () => {
         setLoadingComments(true);
         try {
-            const data = await loadCommentTree(id, commentsPage);
+            const data = await loadCommentTree(id, commentsPage, commentSort);
             setComments(data.tree);
             setTotalCommentPages(data.totalPages);
         } catch {
@@ -728,7 +735,7 @@ function QuestionDetail() {
         } finally {
             setLoadingComments(false);
         }
-    }, [id, commentsPage]);
+    }, [id, commentsPage, commentSort]);
 
     useEffect(() => {
         const load = async () => {
@@ -1027,7 +1034,7 @@ function QuestionDetail() {
     }
 
     return (
-        <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_280px]">
+        <div className="mx-auto grid max-w-4xl gap-6 lg:grid-cols-[1fr_280px]">
             <section className="min-w-0 space-y-5">
                 <Link
                     to="/"
@@ -1280,21 +1287,43 @@ function QuestionDetail() {
 
                 {/* Comments section */}
                 <div>
-                    <h2 className="mb-3 flex items-center gap-2 font-code text-sm font-semibold text-foreground">
-                        <MessageSquare className="h-4 w-4 text-neon" />
-                        <span className="text-muted-foreground">~/</span>
-                        comments
-                        <span className="rounded-full bg-surface px-2 py-0.5 font-code text-[11px] text-muted-foreground">
-                            {thread.numberComments}
-                        </span>
-                    </h2>
+                    <div className="mb-3 flex items-start justify-between gap-4">
+                        <h2 className="flex items-center gap-2 font-code text-sm font-semibold text-foreground">
+                            <MessageSquare className="h-4 w-4 text-neon" />
+                            <span className="text-muted-foreground">~/</span>
+                            comments
+                            <span className="rounded-full bg-surface px-2 py-0.5 font-code text-[11px] text-muted-foreground">
+                                {thread.numberComments}
+                            </span>
+                        </h2>
+
+                        <div className="w-40">
+                            <Select
+                                defaultValue={commentSort}
+                                onValueChange={(v) => {
+                                    const next = v as "latest" | "oldest" | "top";
+                                    setCommentSort(next);
+                                    setCommentsPage(0);
+                                }}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="latest">Latest</SelectItem>
+                                    <SelectItem value="oldest">Oldest</SelectItem>
+                                    <SelectItem value="top">Top</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
 
                     {loadingComments ? (
                         <div className="flex justify-center py-10">
                             <Loader2 className="h-5 w-5 animate-spin text-neon" />
                         </div>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             {comments.map((comment) => (
                                 <CommentCard
                                     key={comment.id}

@@ -379,7 +379,7 @@ function ProfilePage() {
     const isPrivileged = role === "ADMIN" || role === "MODERATOR";
 
     return (
-        <div className="mx-auto max-w-2xl space-y-5">
+        <div className="mx-auto max-w-4xl space-y-5">
             {/* Page header */}
             <div className="flex items-center justify-between">
                 <h1 className="font-code text-xl font-bold">
