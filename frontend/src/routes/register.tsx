@@ -2,10 +2,10 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Check, UserPlus } from "lucide-react";
+import { Eye, EyeOff, Check, UserPlus, MailCheck, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { apiFetch, API_ENDPOINTS } from "@/lib/api";
+import { apiFetch, API_ENDPOINTS, type AuthResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/register")({
@@ -24,14 +24,8 @@ const schema = z
     message: "Passwords don't match",
     path: ["confirmPassword"],
   });
-type FormValues = z.infer<typeof schema>;
 
-interface AuthResponse {
-  accessToken: string;
-  username: string;
-  email: string;
-  role: string;
-}
+type FormValues = z.infer<typeof schema>;
 
 function RegisterPage() {
   const navigate = useNavigate();
@@ -42,22 +36,53 @@ function RegisterPage() {
     register,
     handleSubmit,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema), mode: "onChange" });
 
   const username = watch("username");
 
+  const showRegistrationConflict = (message: string) => {
+    const normalized = message.toLowerCase();
+    const isDuplicateAccount =
+      normalized.includes("already exists") ||
+      normalized.includes("already in use") ||
+      normalized.includes("duplicate") ||
+      normalized.includes("taken") ||
+      normalized.includes("conflict");
+
+    if (!isDuplicateAccount) return false;
+
+    const fieldMessage = "Username or email is already in use";
+    setError("username", { type: "server", message: fieldMessage });
+    setError("email", { type: "server", message: fieldMessage });
+    return true;
+  };
+
   const onSubmit = async (data: FormValues) => {
     try {
       const res = await apiFetch<AuthResponse>(API_ENDPOINTS.register, {
         method: "POST",
-        body: JSON.stringify({ username: data.username, email: data.email, password: data.password }),
+        body: JSON.stringify({
+          username: data.username,
+          email: data.email,
+          password: data.password
+        }),
       });
-      login(res.accessToken, { username: res.username, email: res.email, role: res.role });
+
+      login(res.accessToken, {
+        username: res.username,
+        email: res.email,
+        role: res.role
+      });
+
       toast.success("Account created! Welcome to TechForum Pro.");
-      navigate({ to: "/" });
+      await navigate({to: "/"});
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Registration failed");
+      const message = err instanceof Error ? err.message : "Registration failed";
+      if (!showRegistrationConflict(message)) {
+        toast.error(message);
+      }
     }
   };
 
@@ -92,6 +117,12 @@ function RegisterPage() {
             <input type="email" {...register("email")} placeholder="dev@example.com"
               className="w-full rounded-lg border border-input bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none" />
             {errors.email && <p className="mt-1 font-code text-[11px] text-destructive">{errors.email.message}</p>}
+            {!errors.email && username && (
+              <p className="mt-1 flex items-center gap-1 font-code text-[11px] text-muted-foreground">
+                <MailCheck className="h-3 w-3" />
+                Verification email will use this address
+              </p>
+            )}
           </div>
 
           <div>
@@ -122,6 +153,25 @@ function RegisterPage() {
             </span>
           </button>
         </form>
+
+        <div className="mt-5 rounded-lg border border-border bg-surface/60 p-3 text-left font-code text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-2 text-foreground">
+            <ShieldCheck className="h-3.5 w-3.5 text-neon" />
+            Account safety
+          </div>
+          <p className="mt-1 leading-relaxed">
+            We are rolling out email verification and password recovery flows.
+            Use the links below to get to those screens.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <Link to="/verify-email" className="text-neon hover:underline">
+              Email verification
+            </Link>
+            <Link to="/forgot-password" className="text-neon hover:underline">
+              Forgot password
+            </Link>
+          </div>
+        </div>
 
         <p className="mt-6 text-center font-code text-xs text-muted-foreground">
           Already have an account?{" "}

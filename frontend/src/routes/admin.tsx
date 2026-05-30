@@ -1,4 +1,4 @@
-import {createFileRoute, Link} from "@tanstack/react-router";
+import {createFileRoute, Link, Outlet} from "@tanstack/react-router";
 import {
     Users,
     MessageSquare,
@@ -205,6 +205,8 @@ function AdminDashboard() {
                     ))}
                 </div>
             </div>
+
+            <Outlet />
         </div>
     );
 }

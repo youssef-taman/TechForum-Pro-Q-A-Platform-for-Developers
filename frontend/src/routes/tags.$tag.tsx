@@ -3,6 +3,8 @@ import {useEffect, useMemo, useState} from "react";
 import {Loader2, Tag} from "lucide-react";
 import {toast} from "sonner";
 import {StatusBadge} from "@/components/StatusBadge";
+import {Markdown} from "@/components/Markdown";
+import {Tag as Tag2} from "@/components/Tag";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import type {Page, Thread} from "@/types";
 
@@ -95,20 +97,15 @@ function TagDetail() {
                                 <div className="flex flex-wrap items-center gap-1.5">
                                     <StatusBadge status={thread.status} />
                                     {thread.tags?.slice(0, 3).map((threadTag) => (
-                                        <span
-                                            key={threadTag.id}
-                                            className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground"
-                                        >
-                                            {threadTag.name}
-                                        </span>
+                                        <Tag2 key={threadTag.id} name={threadTag.name} compact />
                                     ))}
                                 </div>
                                 <h3 className="mt-1.5 line-clamp-1 font-semibold text-foreground leading-snug group-hover:text-neon transition-colors">
                                     {thread.title}
                                 </h3>
-                                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                                    {thread.body}
-                                </p>
+                                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
+                                    <Markdown content={thread.body} compact />
+                                </div>
                                 <div className="mt-2 flex items-center gap-2 font-code text-[11px] text-muted-foreground">
                                     <span className="text-neon">@{thread.authorName}</span>
                                     <span className="text-muted-foreground/40">·</span>

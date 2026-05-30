@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { getRouter } from "./router";
 import "./styles.css";
+// Background-initialize optional runtimes to reduce first-run latency
+import { prewarmAll } from "./lib/runtime-init";
+
+prewarmAll();
 
 const router = getRouter();
 const rootElement = document.getElementById("root");

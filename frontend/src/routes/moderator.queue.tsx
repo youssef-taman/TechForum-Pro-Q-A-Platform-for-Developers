@@ -11,6 +11,8 @@ import {
 import {useAuth} from "@/lib/auth-context";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import {StatusBadge} from "@/components/StatusBadge";
+import {Markdown} from "@/components/Markdown";
+import {Tag} from "@/components/Tag";
 import type {Thread, Page} from "@/types";
 
 export const Route = createFileRoute("/moderator/queue")({
@@ -36,7 +38,7 @@ function ModQueue() {
         }
         setLoading(true);
         apiFetch<Page<Thread>>(
-            `${API_ENDPOINTS.threads}?status=CLOSED&size=20&sortBy=latest`,
+            `${API_ENDPOINTS.threads}?status=OPEN&size=20&sortBy=latest`,
         )
             .then((data) => setThreads(data.content))
             .catch(() => toast.error("Failed to load queue"))
@@ -133,12 +135,7 @@ function ModQueue() {
                                         <div className="flex flex-wrap items-center gap-2">
                                             <StatusBadge status={item.status} />
                                             {item.tags?.map((tag) => (
-                                                <span
-                                                    key={tag.id}
-                                                    className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground"
-                                                >
-                                                    {tag.name}
-                                                </span>
+                                                <Tag key={tag.id} name={tag.name} compact />
                                             ))}
                                         </div>
                                         <Link
@@ -151,9 +148,9 @@ function ModQueue() {
                                                 {item.title}
                                             </h3>
                                         </Link>
-                                        <p className="mt-1 line-clamp-2 font-code text-xs text-muted-foreground">
-                                            {item.body}
-                                        </p>
+                                        <div className="mt-1 line-clamp-2 font-code text-xs text-muted-foreground">
+                                            <Markdown content={item.body} compact />
+                                        </div>
                                         <div className="mt-2 flex items-center gap-2 font-code text-[11px] text-muted-foreground">
                                             <span className="text-neon">
                                                 @{item.authorName}

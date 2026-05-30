@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import {useEffect, useState, useMemo, useCallback} from "react";
 import {StatusBadge} from "@/components/StatusBadge";
+import {Markdown} from "@/components/Markdown";
+import {Tag} from "@/components/Tag";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import type {Thread, ThreadStatus, Page} from "@/types";
 import {toast} from "sonner";
@@ -486,14 +488,7 @@ function HomePage() {
                                     <div className="flex flex-wrap items-center gap-1.5">
                                         <StatusBadge status={thread.status} />
                                         {thread.tags?.slice(0, 3).map((tag) => (
-                                            <Link
-                                                key={tag.id}
-                                                to="/tags/$tag"
-                                                params={{tag: tag.name}}
-                                                className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
-                                            >
-                                                {tag.name}
-                                            </Link>
+                                            <Tag key={tag.id} name={tag.name} to="/tags/$tag" params={{tag: tag.name}} compact />
                                         ))}
                                         {(thread.tags?.length ?? 0) > 3 && (
                                             <span className="font-code text-[10px] text-muted-foreground">
@@ -504,9 +499,9 @@ function HomePage() {
                                     <h3 className="mt-1.5 line-clamp-1 font-semibold text-foreground leading-snug group-hover:text-neon transition-colors">
                                         {thread.title}
                                     </h3>
-                                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                                        {thread.body}
-                                    </p>
+                                    <div className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
+                                        <Markdown content={thread.body} compact />
+                                    </div>
                                     <div className="mt-2 flex items-center gap-2 font-code text-[11px] text-muted-foreground">
                                         <span className="text-neon">
                                             @{thread.authorName}

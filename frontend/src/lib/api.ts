@@ -1,38 +1,53 @@
 export const API_BASE_URL = import.meta.env.VITE_SPRING_BOOT_API_URL ?? "/api";
 
 export const API_ENDPOINTS = {
-  // Auth
-  login: `${API_BASE_URL}/auth/login`,
-  register: `${API_BASE_URL}/auth/register`,
-  logout: `${API_BASE_URL}/auth/logout`,
+    // Auth
+    login: `${API_BASE_URL}/auth/login`,
+    register: `${API_BASE_URL}/auth/register`,
+    logout: `${API_BASE_URL}/auth/logout`,
 
-  // Users
-  promote: (id: string) => `${API_BASE_URL}/users/${id}/promote`,
-  demote: (id: string) => `${API_BASE_URL}/users/${id}/demote`,
-  suspend: (id: string) => `${API_BASE_URL}/users/${id}/suspend`,
-  deleteUser: (id: string) => `${API_BASE_URL}/users/${id}`,
-  users: `${API_BASE_URL}/users`,
+    requestPasswordReset: `${API_BASE_URL}/auth/password-reset/request`,
+    confirmPasswordReset: `${API_BASE_URL}/auth/password-reset/confirm`,
 
-  // Threads
-  threads: `${API_BASE_URL}/threads`,
-  threadExpand: (username: string, id: string) => `${API_BASE_URL}/threads/${username}/${id}`,
-  threadById: (id: string) => `${API_BASE_URL}/threads/${id}`,
-  userThreads: (username: string) => `${API_BASE_URL}/threads/user/${username}`,
-  threadSearch: `${API_BASE_URL}/threads/search`,
+    requestEmailVerification: `${API_BASE_URL}/auth/email-verification/request`,
+    confirmEmailVerification: `${API_BASE_URL}/auth/email-verification/confirm`,
 
-  // Tags (NEW - To fetch tags for the "Ask Question" form)
-  tags: `${API_BASE_URL}/tags`,
+    // Users
+    promote: (id: string) => `${API_BASE_URL}/users/${id}/promote`,
+    demote: (id: string) => `${API_BASE_URL}/users/${id}/demote`,
+    suspend: (id: string) => `${API_BASE_URL}/users/${id}/suspend`,
+    unsuspend: (id: string) => `${API_BASE_URL}/users/${id}/unsuspend`,
+    deleteUser: (id: string) => `${API_BASE_URL}/users/${id}`,
+    users: `${API_BASE_URL}/users`,
+    adminMetrics: `${API_BASE_URL}/admin/metrics`,
 
-  // Comments
-  commentsBase: `${API_BASE_URL}/comments`, // NEW - Use this for POST (creating comments)
-  comments: (threadId: string) => `${API_BASE_URL}/comments/${threadId}`, // Use this for GET (fetching comments)
-  commentReplies: (commentId: string) => `${API_BASE_URL}/comments/${commentId}/replies`,
-  commentById: (commentId: string) => `${API_BASE_URL}/comments/${commentId}`, // Use this for PATCH/DELETE
+    // Threads
+    threads: `${API_BASE_URL}/threads`,
+    threadTagRecommendations: `${API_BASE_URL}/threads/ai/tags`,
+    threadDuplicateCheck: `${API_BASE_URL}/threads/ai/duplicates`,
+    threadExpand: (username: string, id: string) =>
+        `${API_BASE_URL}/threads/${username}/${id}`,
+    threadById: (id: string) => `${API_BASE_URL}/threads/${id}`,
+    userThreads: (username: string) =>
+        `${API_BASE_URL}/threads/user/${username}`,
+    threadSearch: `${API_BASE_URL}/threads/search`,
 
-  // Interactions
-  bookmarks: `${API_BASE_URL}/interactions/bookmarks`,
-  bookmarkThread: (threadId: string) => `${API_BASE_URL}/interactions/bookmarks/${threadId}`,
-  voteComment: (commentId: string) => `${API_BASE_URL}/interactions/comments/${commentId}/votes`,
+    // Tags (NEW - To fetch tags for the "Ask Question" form)
+    tags: `${API_BASE_URL}/tags`,
+
+    // Comments
+    commentsBase: `${API_BASE_URL}/comments`, // NEW - Use this for POST (creating comments)
+    comments: (threadId: string) => `${API_BASE_URL}/comments/${threadId}`, // Use this for GET (fetching comments)
+    commentReplies: (commentId: string) =>
+        `${API_BASE_URL}/comments/${commentId}/replies`,
+    commentById: (commentId: string) => `${API_BASE_URL}/comments/${commentId}`, // Use this for PATCH/DELETE
+
+    // Interactions
+    bookmarks: `${API_BASE_URL}/interactions/bookmarks`,
+    bookmarkThread: (threadId: string) =>
+        `${API_BASE_URL}/interactions/bookmarks/${threadId}`,
+    voteComment: (commentId: string) =>
+        `${API_BASE_URL}/interactions/comments/${commentId}/votes`,
 } as const;
 
 const TOKEN_KEY = "tf_access_token";
@@ -42,9 +57,19 @@ export interface StoredUser {
     username: string;
     email: string;
     role: string;
-    // Optional: backend may not include this on every auth response,
-    // but components (e.g. profile.tsx) expect it. Keep optional to
-    // avoid runtime issues when missing.
+    isSuspended?: boolean;
+}
+
+export type AuthActionResponse = {
+    message: string;
+    token?: string | null;
+};
+
+export interface AuthResponse {
+    accessToken: string;
+    username: string;
+    email: string;
+    role: string;
     isSuspended?: boolean;
 }
 
@@ -67,48 +92,99 @@ export function getToken(): string | null {
 
 export function getStoredUser(): StoredUser | null {
     if (typeof window === "undefined") return null;
+
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
+
     try {
-        return JSON.parse(raw);
+        return JSON.parse(raw) as StoredUser;
     } catch {
+        clearAuth();
         return null;
     }
 }
 
+export function getAuthHeader(): Record<string, string> {
+    const token = getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function isJsonContentType(contentType: string | null) {
+    return contentType?.toLowerCase().includes("application/json") ?? false;
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+    const fallback = `Request failed with status ${res.status}`;
+
+    const contentType = res.headers.get("content-type");
+    const text = await res.text().catch(() => "");
+
+    if (!text) return fallback;
+
+    if (!isJsonContentType(contentType)) {
+        return text;
+    }
+
+    try {
+        const body = JSON.parse(text);
+        return (
+            body?.message ||
+            body?.error ||
+            body?.detail ||
+            body?.title ||
+            fallback
+        );
+    } catch {
+        return fallback;
+    }
+}
+
+function handleUnauthorized() {
+    clearAuth();
+
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("techforum:auth-expired"));
+    }
+}
+
 export async function apiFetch<T = unknown>(
-    url: string,
+    endpoint: string,
     options: RequestInit = {},
 ): Promise<T> {
-    const token = localStorage.getItem("tf_access_token");
-    const headers = {
-      "Content-Type": "application/json",
-      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-      ...options.headers,
-    };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    const res = await fetch(url, {...options, headers});
-
-    if (res.status === 403) {
-      console.error("Access forbidden: Token may be expired or invalid.");
-      // window.location.href = "/login";
+    const headers = new Headers(options.headers);
+    if (!headers.has("Content-Type") && options.body !== undefined) {
+        headers.set("Content-Type", "application/json");
     }
+
+    const token = getToken();
+    if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    const res = await fetch(endpoint, {
+        ...options,
+        headers,
+    });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText);
-        throw new Error(text || `HTTP ${res.status}`);
+        const message = await readErrorMessage(res);
+
+        if (res.status === 401) {
+            handleUnauthorized();
+        }
+
+        throw new Error(message);
     }
 
-    if (res.status === 204) return null as T;
-
-    const contentType = res.headers.get("content-type") ?? "";
-    const text = await res.text();
-    if (!text.trim()) return null as T;
-
-    if (contentType.includes("application/json")) {
-        return JSON.parse(text) as T;
+    const contentType = res.headers.get("content-type");
+    if (!isJsonContentType(contentType)) {
+        return undefined as T;
     }
 
-    return text as T;
+
+    if (res.status === 204) {
+        return undefined as T;
+    }
+
+    return await res.json() as Promise<T>;
 }

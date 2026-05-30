@@ -10,8 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as BookmarksRouteImport } from './routes/bookmarks'
 import { Route as AskRouteImport } from './routes/ask'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -27,6 +29,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -35,6 +42,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BookmarksRoute = BookmarksRouteImport.update({
@@ -89,8 +101,10 @@ export interface FileRoutesByFullPath {
   '/ask': typeof AskRoute
   '/bookmarks': typeof BookmarksRoute
   '/login': typeof LoginRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/admin/users': typeof AdminUsersRoute
   '/moderator/queue': typeof ModeratorQueueRoute
   '/questions/$id': typeof QuestionsIdRoute
@@ -103,8 +117,10 @@ export interface FileRoutesByTo {
   '/ask': typeof AskRoute
   '/bookmarks': typeof BookmarksRoute
   '/login': typeof LoginRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/admin/users': typeof AdminUsersRoute
   '/moderator/queue': typeof ModeratorQueueRoute
   '/questions/$id': typeof QuestionsIdRoute
@@ -118,8 +134,10 @@ export interface FileRoutesById {
   '/ask': typeof AskRoute
   '/bookmarks': typeof BookmarksRoute
   '/login': typeof LoginRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/admin/users': typeof AdminUsersRoute
   '/moderator/queue': typeof ModeratorQueueRoute
   '/questions/$id': typeof QuestionsIdRoute
@@ -134,8 +152,10 @@ export interface FileRouteTypes {
     | '/ask'
     | '/bookmarks'
     | '/login'
+    | '/forgot-password'
     | '/profile'
     | '/register'
+    | '/verify-email'
     | '/admin/users'
     | '/moderator/queue'
     | '/questions/$id'
@@ -148,8 +168,10 @@ export interface FileRouteTypes {
     | '/ask'
     | '/bookmarks'
     | '/login'
+    | '/forgot-password'
     | '/profile'
     | '/register'
+    | '/verify-email'
     | '/admin/users'
     | '/moderator/queue'
     | '/questions/$id'
@@ -176,9 +198,11 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   AskRoute: typeof AskRoute
   BookmarksRoute: typeof BookmarksRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
   RegisterRoute: typeof RegisterRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ModeratorQueueRoute: typeof ModeratorQueueRoute
   QuestionsIdRoute: typeof QuestionsIdRoute
   TagsRoute: typeof TagsRoute
@@ -201,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+      '/forgot-password': {
+        id: '/forgot-password'
+        path: '/forgot-password'
+        fullPath: '/forgot-password'
+        preLoaderRoute: typeof ForgotPasswordRouteImport
+        parentRoute: typeof rootRouteImport
+      }
     '/login': {
       id: '/login'
       path: '/login'
@@ -208,6 +239,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+      '/verify-email': {
+        id: '/verify-email'
+        path: '/verify-email'
+        fullPath: '/verify-email'
+        preLoaderRoute: typeof VerifyEmailRouteImport
+        parentRoute: typeof rootRouteImport
+      }
     '/bookmarks': {
       id: '/bookmarks'
       path: '/bookmarks'
@@ -289,9 +327,11 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   AskRoute: AskRoute,
   BookmarksRoute: BookmarksRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
   RegisterRoute: RegisterRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   ModeratorQueueRoute: ModeratorQueueRoute,
   QuestionsIdRoute: QuestionsIdRoute,
   TagsRoute: TagsRoute,

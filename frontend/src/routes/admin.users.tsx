@@ -117,7 +117,10 @@ function UserDirectory() {
 
     const promote = async (id: string) => {
         try {
-            await apiFetch(API_ENDPOINTS.promote(id), {method: "POST"});
+            await apiFetch(API_ENDPOINTS.promote(id), {
+                method: "POST",
+                body: JSON.stringify({role: "MODERATOR"}),
+            });
             setUsers((prev) =>
                 prev.map((u) => (u.id === id ? {...u, role: "MODERATOR"} : u)),
             );
@@ -148,6 +151,22 @@ function UserDirectory() {
             toast.success("User suspended");
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Action failed");
+        }
+    };
+
+    const unsuspend = async (id: string) => {
+        try {
+            await apiFetch(API_ENDPOINTS.unsuspend(id), {method: "POST"});
+            setUsers((prev) =>
+                prev.map((u) =>
+                    u.id === id ? {...u, isSuspended: false} : u,
+                ),
+            );
+            toast.success("User unsuspended");
+        } catch (err) {
+            toast.error(
+                err instanceof Error ? err.message : "Action failed",
+            );
         }
     };
 
@@ -483,6 +502,14 @@ function UserDirectory() {
                                                         className="rounded-md border border-destructive/40 px-2 py-1 text-destructive hover:bg-destructive/10"
                                                     >
                                                         Suspend
+                                                    </button>
+                                                )}
+                                                {u.isSuspended && u.role !== "ADMIN" && (
+                                                    <button
+                                                        onClick={() => unsuspend(u.id)}
+                                                        className="rounded-md border border-emerald-500/40 px-2 py-1 text-emerald-500 hover:bg-emerald-500/10"
+                                                    >
+                                                        Unsuspend
                                                     </button>
                                                 )}
                                                 {u.role !== "ADMIN" && (

@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Eye, Pencil, X, Send } from "lucide-react";
+import { AlertTriangle, Eye, Loader2, Pencil, Plus, SearchX, Sparkles, X, Send } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import { apiFetch, API_ENDPOINTS } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/ask")({
   head: () => ({ meta: [{ title: "Ask a Question — TechForum Pro" }] }),
@@ -15,6 +16,14 @@ export const Route = createFileRoute("/ask")({
 const TITLE_MAX = 150;
 const BODY_MIN = 30;
 
+type DuplicateSuggestion = {
+  threadId: string;
+  authorUsername: string;
+  title: string;
+  cosineSimilarityScore: number;
+  createdAt: string;
+};
+
 function AskPage() {
   const navigate = useNavigate();
   const { isLoggedIn } = useAuth();
@@ -22,8 +31,18 @@ function AskPage() {
   const [body, setBody] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [duplicateSuggestions, setDuplicateSuggestions] = useState<DuplicateSuggestion[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const previewPayload = {
+    title: title.trim(),
+    body: body.trim(),
+    tags: [],
+  };
 
   const addTag = () => {
     const t = tagInput.trim().toLowerCase();
@@ -32,6 +51,71 @@ function AskPage() {
     setTagInput("");
   };
   const removeTag = (t: string) => setTags(tags.filter((x) => x !== t));
+
+  const addSuggestedTag = (tag: string) => {
+    const normalized = tag.trim().toLowerCase();
+    if (!normalized || tags.includes(normalized)) return;
+    setTags((current) => [...current, normalized]);
+  };
+
+  const canAnalyze = title.trim().length >= 8 && body.trim().length >= BODY_MIN;
+
+  const fetchTagRecommendations = async () => {
+    if (!canAnalyze) {
+      toast.error("Add a title and body before requesting tag recommendations.");
+      return;
+    }
+
+    setLoadingTags(true);
+    try {
+      const suggestions = await apiFetch<string[]>(API_ENDPOINTS.threadTagRecommendations, {
+        method: "POST",
+        body: JSON.stringify(previewPayload),
+      });
+
+      setTagSuggestions(
+        Array.from(new Set((suggestions ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean))),
+      );
+
+      toast.success("Tag recommendations ready.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load tag recommendations");
+    } finally {
+      setLoadingTags(false);
+    }
+  };
+
+  const checkDuplicateThreads = async () => {
+    if (!canAnalyze) {
+      toast.error("Add a title and body before checking duplicates.");
+      return;
+    }
+
+    setLoadingDuplicates(true);
+    try {
+      const matches = await apiFetch<DuplicateSuggestion[]>(API_ENDPOINTS.threadDuplicateCheck, {
+        method: "POST",
+        body: JSON.stringify(previewPayload),
+      });
+
+      setDuplicateSuggestions(matches ?? []);
+
+      if ((matches ?? []).length > 0) {
+        toast.warning("Potential duplicates found. Review them before posting.");
+      } else {
+        toast.success("No close duplicates found.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to check duplicates");
+    } finally {
+      setLoadingDuplicates(false);
+    }
+  };
+
+  useEffect(() => {
+    setTagSuggestions([]);
+    setDuplicateSuggestions([]);
+  }, [title, body]);
 
   const titleValid = title.trim().length >= 8 && title.length <= TITLE_MAX;
   const bodyValid = body.trim().length >= BODY_MIN;
@@ -54,7 +138,11 @@ function AskPage() {
       toast.success("Question posted!");
       navigate({ to: "/questions/$id", params: { id: thread.id } });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to post question");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to post question",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -145,6 +233,96 @@ function AskPage() {
       </section>
 
       <aside className="space-y-4">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h2 className="font-code text-sm font-semibold text-foreground">AI Assist</h2>
+          <p className="mt-1 font-code text-[11px] text-muted-foreground">
+            Generate tag ideas and scan for similar questions before you submit.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={fetchTagRecommendations}
+              disabled={loadingTags || !canAnalyze}
+              className="justify-start"
+            >
+              {loadingTags ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {loadingTags ? "Loading tag ideas..." : "Recommend tags"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={checkDuplicateThreads}
+              disabled={loadingDuplicates || !canAnalyze}
+              className="justify-start"
+            >
+              {loadingDuplicates ? <Loader2 className="h-4 w-4 animate-spin" /> : <SearchX className="h-4 w-4" />}
+              {loadingDuplicates ? "Checking duplicates..." : "Check duplicates"}
+            </Button>
+          </div>
+
+          {tagSuggestions.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="font-code text-[11px] uppercase tracking-wide text-muted-foreground">Suggested tags</h3>
+                <span className="font-code text-[11px] text-muted-foreground">Click to add</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tagSuggestions.map((tag) => {
+                  const alreadySelected = tags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => addSuggestedTag(tag)}
+                      disabled={alreadySelected}
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 font-code text-[11px] transition ${
+                        alreadySelected
+                          ? "cursor-not-allowed border-border bg-muted text-muted-foreground"
+                          : "border-neon/30 bg-neon/10 text-neon hover:border-neon hover:bg-neon/15"
+                      }`}
+                    >
+                      <Plus className="h-3 w-3" />
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {duplicateSuggestions.length > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-4 w-4" />
+                <h3 className="font-code text-[11px] uppercase tracking-wide">Potential duplicates</h3>
+              </div>
+              <div className="mt-3 space-y-2">
+                {duplicateSuggestions.map((duplicate) => (
+                  <Link
+                    key={duplicate.threadId}
+                    to="/questions/$id"
+                    params={{ id: duplicate.threadId }}
+                    className="block rounded-md border border-border bg-background/70 p-3 transition hover:border-neon/40 hover:bg-background"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-code text-sm font-medium text-foreground">{duplicate.title}</p>
+                        <p className="mt-1 font-code text-[11px] text-muted-foreground">
+                          by @{duplicate.authorUsername}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-border px-2 py-0.5 font-code text-[10px] text-muted-foreground">
+                        {Math.round((duplicate.cosineSimilarityScore ?? 0) * 100)}%
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="font-code text-sm font-semibold text-foreground">Preview</h2>
           <div className="mt-3 rounded-lg border border-border bg-background p-4">

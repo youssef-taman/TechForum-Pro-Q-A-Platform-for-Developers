@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { saveAuth, clearAuth, getStoredUser, type StoredUser } from "./api";
 
 interface AuthContextValue {
@@ -12,6 +12,18 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<StoredUser | null>(() => getStoredUser());
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setUser(null);
+    };
+
+    window.addEventListener("techforum:auth-expired", handleAuthExpired);
+
+    return () => {
+      window.removeEventListener("techforum:auth-expired", handleAuthExpired);
+    };
+  }, []);
 
   const login = useCallback((token: string, userData: StoredUser) => {
     saveAuth(token, userData);

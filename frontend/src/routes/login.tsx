@@ -2,10 +2,10 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff, LogIn, HelpCircle, MailCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { apiFetch, API_ENDPOINTS } from "@/lib/api";
+import { apiFetch, API_ENDPOINTS, type AuthResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/login")({
@@ -17,14 +17,8 @@ const schema = z.object({
   identifier: z.string().min(1, "Username or email is required"),
   password: z.string().min(8, "At least 8 characters"),
 });
-type FormValues = z.infer<typeof schema>;
 
-interface AuthResponse {
-  accessToken: string;
-  username: string;
-  email: string;
-  role: string;
-}
+type FormValues = z.infer<typeof schema>;
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -43,9 +37,15 @@ function LoginPage() {
         method: "POST",
         body: JSON.stringify({ identifier: data.identifier, password: data.password }),
       });
-      login(res.accessToken, { username: res.username, email: res.email, role: res.role });
+
+      login(res.accessToken, {
+        username: res.username,
+        email: res.email,
+        role: res.role
+      });
+
       toast.success(`Welcome back, ${res.username}!`);
-      navigate({ to: "/" });
+      await navigate({to: "/"});
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Login failed");
     }
@@ -90,6 +90,17 @@ function LoginPage() {
               </button>
             </div>
             {errors.password && <p className="mt-1 font-code text-[11px] text-destructive">{errors.password.message}</p>}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 font-code text-[11px] text-muted-foreground">
+            <Link to="/forgot-password" className="inline-flex items-center gap-1 text-neon hover:underline">
+              <HelpCircle className="h-3 w-3" />
+              Forgot password?
+            </Link>
+            <Link to="/verify-email" className="inline-flex items-center gap-1 text-neon hover:underline">
+              <MailCheck className="h-3 w-3" />
+              Verify email
+            </Link>
           </div>
 
           <button
