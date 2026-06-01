@@ -1,556 +1,387 @@
-import {createFileRoute, Link} from "@tanstack/react-router";
-import {useEffect, useMemo, useState, useCallback, useRef} from "react";
-import {toast} from "sonner";
-import {Search, Loader2, UserCog} from "lucide-react";
-import {apiFetch, API_ENDPOINTS} from "@/lib/api";
-import {useAuth} from "@/lib/auth-context";
-import type {User, Page} from "@/types";
+import {createFileRoute} from "@tanstack/react-router";
+import {useEffect, useState, useCallback} from "react";
 import {
     Select,
-    SelectContent,
-    SelectItem,
     SelectTrigger,
     SelectValue,
+    SelectContent,
+    SelectItem,
 } from "@/components/ui/select";
+import {
+    Loader2,
+    ShieldCheck,
+    ShieldOff,
+    Trash2,
+    UserCheck,
+    UserX,
+} from "lucide-react";
+import {toast} from "sonner";
+import {apiFetch, API_ENDPOINTS} from "@/lib/api";
+import type {User} from "@/types";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {Page} from "@/types";
 
+type UserSort = "username_asc" | "username_desc" | "role" | "suspended";
 export const Route = createFileRoute("/admin/users")({
-    head: () => ({meta: [{title: "User Directory — TechForum Pro Admin"}]}),
-    component: UserDirectory,
+    head: () => ({meta: [{title: "User Management — Admin"}]}),
+    component: AdminUsersPage,
 });
 
-function UserDirectory() {
-    const {user, isLoggedIn, login, logout} = useAuth();
+function AdminUsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userSort, setUserSort] = useState<UserSort>("username_asc");
     const [page, setPage] = useState(0);
-    const [query, setQuery] = useState("");
-    const [roleFilter, setRoleFilter] = useState("all");
-    const [statusFilter, setStatusFilter] = useState("all");
-    const [sortBy, setSortBy] = useState("username-asc");
+    const [totalPages, setTotalPages] = useState(1);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+    const [busyId, setBusyId] = useState<string | null>(null);
 
-    const isAdmin = isLoggedIn && user?.role?.toUpperCase() === "ADMIN";
-    const PAGE_SIZE = 12;
-
-    const loadUsers = useCallback(async () => {
-        if (!isAdmin) {
-            setLoading(false);
-            return;
-        }
+    const load = useCallback(async (p = 0) => {
         setLoading(true);
         try {
-            // Try a single large page first to avoid many sequential requests.
-            const pageSize = 1000;
-            const firstPage = await apiFetch<Page<User>>(
-                `${API_ENDPOINTS.users}?page=0&size=${pageSize}`,
-            );
+            const url = `${API_ENDPOINTS.users}?page=${p}&size=20${searchTerm ? `&q=${encodeURIComponent(
+                searchTerm,
+            )}` : ""}`;
 
-            const allUsers: User[] = [...firstPage.content];
-
-            if (firstPage.totalPages > 1) {
-                // Fetch remaining pages in parallel to speed things up.
-                const rest = await Promise.all(
-                    Array.from({length: firstPage.totalPages - 1}, (_, i) =>
-                        apiFetch<Page<User>>(
-                            `${API_ENDPOINTS.users}?page=${i + 1}&size=${pageSize}`,
-                        ),
-                    ),
-                );
-                rest.forEach((p) => allUsers.push(...p.content));
-            }
-
-            setUsers(allUsers);
-        } catch (err) {
-            console.error("Failed loading users", err);
-            toast.error(err instanceof Error ? err.message : "Failed to load users");
+            const data = await apiFetch<Page<User>>(url);
+            let items = data.content;
+            // apply initial sort client-side
+            items = applyUserSort(items, userSort);
+            setUsers(items);
+            setTotalPages(data.totalPages ?? 1);
+        } catch {
+            toast.error("Failed to load users");
         } finally {
             setLoading(false);
         }
-        }, [isAdmin]);
+    }, [searchTerm, userSort]);
 
     useEffect(() => {
-        loadUsers();
-    }, [loadUsers]);
+        load(page);
+    }, [page, load]);
 
-    const filtered = useMemo(() => {
-        const term = query.trim().toLowerCase();
-        const role = roleFilter.toUpperCase();
-
-        const list = users.filter((u) => {
-            const matchesQuery = !term || u.username.toLowerCase().includes(term);
-            const matchesRole = roleFilter === "all" || u.role === role;
-            const matchesStatus =
-                statusFilter === "all" ||
-                (statusFilter === "active" && !u.isSuspended) ||
-                (statusFilter === "suspended" && u.isSuspended);
-            return matchesQuery && matchesRole && matchesStatus;
-        });
-
-        list.sort((a, b) => {
-            switch (sortBy) {
-                case "username-desc":
-                    return b.username.localeCompare(a.username);
-                case "role": {
-                    const weights = {ADMIN: 0, MODERATOR: 1, USER: 2} as const;
-                    return weights[a.role] - weights[b.role];
-                }
-                case "status":
-                    return Number(a.isSuspended) - Number(b.isSuspended);
-                default:
-                    return a.username.localeCompare(b.username);
-            }
-        });
-
-        return list;
-    }, [users, query, roleFilter, statusFilter, sortBy]);
+    // debounce searchTerm changes
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setPage(0);
+            load(0);
+        }, 300);
+        return () => clearTimeout(t);
+    }, [searchTerm, load]);
 
     useEffect(() => {
-        setPage(0);
-    }, [query, roleFilter, statusFilter, sortBy]);
+        // re-sort current list when sort option changes
+        setUsers((prev) => applyUserSort(prev, userSort));
+    }, [userSort]);
 
-    const totalElements = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(totalElements / PAGE_SIZE));
-    const safePage = Math.min(page, totalPages - 1);
-    const visibleUsers = filtered.slice(
-        safePage * PAGE_SIZE,
-        safePage * PAGE_SIZE + PAGE_SIZE,
-    );
-
-    const promote = async (id: string) => {
-        try {
-            await apiFetch(API_ENDPOINTS.promote(id), {
-                method: "POST",
-                body: JSON.stringify({role: "MODERATOR"}),
-            });
-            setUsers((prev) =>
-                prev.map((u) => (u.id === id ? {...u, role: "MODERATOR"} : u)),
-            );
-            toast.success("Promoted to MODERATOR");
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Action failed");
+    function applyUserSort(items: User[], sort: UserSort) {
+        const copy = [...items];
+        switch (sort) {
+            case "username_asc":
+                return copy.sort((a, b) => a.username.localeCompare(b.username));
+            case "username_desc":
+                return copy.sort((a, b) => b.username.localeCompare(a.username));
+            case "role":
+                return copy.sort((a, b) => a.role.localeCompare(b.role));
+            case "suspended":
+                return copy.sort((a, b) => Number(b.isSuspended) - Number(a.isSuspended));
+            default:
+                return copy;
         }
-    };
-
-    const demote = async (id: string) => {
-        try {
-            await apiFetch(API_ENDPOINTS.demote(id), {method: "POST"});
-            setUsers((prev) =>
-                prev.map((u) => (u.id === id ? {...u, role: "USER"} : u)),
-            );
-            toast.success("Demoted to USER");
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Action failed");
-        }
-    };
-
-    const suspend = async (id: string) => {
-        try {
-            await apiFetch(API_ENDPOINTS.suspend(id), {method: "PATCH"});
-            setUsers((prev) =>
-                prev.map((u) => (u.id === id ? {...u, isSuspended: true} : u)),
-            );
-            toast.success("User suspended");
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Action failed");
-        }
-    };
-
-    const unsuspend = async (id: string) => {
-        try {
-            await apiFetch(API_ENDPOINTS.unsuspend(id), {method: "POST"});
-            setUsers((prev) =>
-                prev.map((u) =>
-                    u.id === id ? {...u, isSuspended: false} : u,
-                ),
-            );
-            toast.success("User unsuspended");
-        } catch (err) {
-            toast.error(
-                err instanceof Error ? err.message : "Action failed",
-            );
-        }
-    };
-
-    const removeUser = async (id: string) => {
-        if (!confirm("Delete this user permanently?")) return;
-        try {
-            await apiFetch(API_ENDPOINTS.deleteUser(id), {method: "DELETE"});
-            setUsers((prev) => prev.filter((u) => u.id !== id));
-            toast.success("User removed");
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Action failed");
-        }
-    };
-
-    const hasFilters =
-        query.trim() || roleFilter !== "all" || statusFilter !== "all" || sortBy !== "username-asc";
-
-    // Attempt a one-time automatic rehydrate if the app thinks we're not admin
-    const rehydratedRef = useRef<boolean>(false);
-    useEffect(() => {
-        const tryRehydrate = async () => {
-            if (isAdmin) return;
-            if (rehydratedRef.current) return;
-            const token = localStorage.getItem("tf_access_token");
-            const raw = localStorage.getItem("tf_user");
-            if (!token || !raw) return;
-            try {
-                const parsed = JSON.parse(raw);
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                login(token, parsed as any);
-                try {
-                    await apiFetch<Page<User>>(`${API_ENDPOINTS.users}?page=0&size=1`);
-                    toast.success("Rehydrated auth from localStorage");
-                    loadUsers();
-                } catch (err) {
-                    logout();
-                    console.warn("Stored token validation failed during auto-rehydrate", err);
-                }
-            } catch (e) {
-                console.warn("Auto-rehydrate parse failed", e);
-            } finally {
-                rehydratedRef.current = true;
-            }
-        };
-        tryRehydrate();
-    }, [isAdmin, login, logout, loadUsers, rehydratedRef]);
-
-    if (!isAdmin) {
-        return (
-            <div className="mx-auto max-w-2xl space-y-4 py-24 text-center">
-                <div className="rounded-xl border border-border bg-card p-6">
-                    <h2 className="font-code text-lg font-semibold text-foreground">
-                        Admin access required
-                    </h2>
-                    <p className="mt-2 font-code text-sm text-muted-foreground">
-                        You must be signed in as an administrator to view the user
-                        directory. If you are an admin, try reloading the page or
-                        signing out and signing in again.
-                    </p>
-                    <div className="mt-3 text-xs text-muted-foreground">
-                        Tip: open DevTools → Console and run
-                        <div className="mt-1 inline-block rounded bg-surface px-2 py-1 font-code text-[11px]">
-                            JSON.parse(localStorage.getItem("tf_user") || "null")
-                        </div>
-                    </div>
-                    <div className="mt-3 flex flex-col items-center gap-2">
-                        <button
-                            onClick={() => {
-                                try {
-                                    console.log(
-                                        "tf_user",
-                                        JSON.parse(localStorage.getItem("tf_user") || "null"),
-                                    );
-                                    console.log("tf_access_token", localStorage.getItem("tf_access_token"));
-                                    alert("Stored auth dumped to console");
-                                } catch (e) {
-                                    alert("Failed to read localStorage: " + (e instanceof Error ? e.message : String(e)));
-                                }
-                            }}
-                            className="mt-2 rounded-md border border-border px-3 py-1 text-xs hover:border-neon"
-                        >
-                            Show stored auth (console)
-                        </button>
-
-                        <button
-                            onClick={async () => {
-                                const token = localStorage.getItem("tf_access_token");
-                                const raw = localStorage.getItem("tf_user");
-                                if (!token || !raw) {
-                                    toast.error("No stored auth found in localStorage");
-                                    return;
-                                }
-                                try {
-                                    const parsed = JSON.parse(raw);
-                                    // call AuthProvider.login to rehydrate app state
-                                    // login expects (token, user)
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    login(token, parsed as any);
-                                    // Validate token by calling a lightweight protected endpoint
-                                    try {
-                                        await apiFetch<Page<User>>(`${API_ENDPOINTS.users}?page=0&size=1`);
-                                        toast.success("Rehydrated auth from localStorage");
-                                        loadUsers();
-                                    } catch (err) {
-                                        // Token invalid or expired. Revert and notify.
-                                        logout();
-                                        toast.error("Stored token is invalid or expired. Please sign in again.");
-                                    }
-                                } catch (e) {
-                                    toast.error("Failed to parse stored user");
-                                }
-                            }}
-                            className="rounded-md border border-neon bg-neon/10 px-3 py-1 text-xs text-neon hover:bg-neon/20"
-                        >
-                            Use stored auth to sign in
-                        </button>
-                    </div>
-                    <div className="mt-4 flex items-center justify-center gap-3">
-                        <Link
-                            to="/"
-                            className="rounded-md border border-border px-3 py-1 text-xs hover:border-neon"
-                        >
-                            Go home
-                        </Link>
-                        <button
-                            onClick={() => window.location.reload()}
-                            className="rounded-md border border-border px-3 py-1 text-xs hover:border-neon"
-                        >
-                            Reload page
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
     }
 
+    const withBusy = async (id: string, fn: () => Promise<void>) => {
+        setBusyId(id);
+        try {
+            await fn();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Action failed");
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const promote = (u: User) =>
+        withBusy(u.id, async () => {
+            await apiFetch(API_ENDPOINTS.promote(u.id), {
+                method: "POST",
+                body: JSON.stringify({role: "MODERATOR"}), // FIX: body required
+            });
+            setUsers((prev) =>
+                prev.map((x) =>
+                    x.id === u.id ? {...x, role: "MODERATOR"} : x,
+                ),
+            );
+            toast.success(`${u.username} promoted to MODERATOR`);
+        });
+
+    const demote = (u: User) =>
+        withBusy(u.id, async () => {
+            await apiFetch(API_ENDPOINTS.demote(u.id), {method: "POST"});
+            setUsers((prev) =>
+                prev.map((x) => (x.id === u.id ? {...x, role: "USER"} : x)),
+            );
+            toast.success(`${u.username} demoted to USER`);
+        });
+
+    const suspend = (u: User) =>
+        withBusy(u.id, async () => {
+            await apiFetch(API_ENDPOINTS.suspend(u.id), {method: "PATCH"});
+            setUsers((prev) =>
+                prev.map((x) =>
+                    x.id === u.id ? {...x, isSuspended: true} : x,
+                ),
+            );
+            toast.success(`${u.username} suspended`);
+        });
+
+    const unsuspend = (u: User) =>
+        withBusy(u.id, async () => {
+            await apiFetch(API_ENDPOINTS.unsuspend(u.id), {method: "POST"});
+            setUsers((prev) =>
+                prev.map((x) =>
+                    x.id === u.id ? {...x, isSuspended: false} : x,
+                ),
+            );
+            toast.success(`${u.username} unsuspended`);
+        });
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        const u = deleteTarget;
+        setDeleteTarget(null);
+        withBusy(u.id, async () => {
+            await apiFetch(API_ENDPOINTS.deleteUser(u.id), {method: "DELETE"});
+            setUsers((prev) => prev.filter((x) => x.id !== u.id));
+            toast.success(`${u.username} deleted`);
+        });
+    };
+
+    const ROLE_STYLE: Record<string, string> = {
+        ADMIN: "border-rose-500/30 bg-rose-500/10 text-rose-500",
+        MODERATOR: "border-amber-500/30 bg-amber-500/10 text-amber-500",
+        USER: "border-border bg-surface text-muted-foreground",
+    };
+
     return (
-        <div className="mx-auto max-w-6xl space-y-6">
-            <div>
-                <h1 className="font-code text-2xl font-bold">
-                    <span className="text-muted-foreground">~/</span>
-                    user-directory
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">{totalElements} users total</p>
-                <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                    <div>isLoggedIn: {String(isLoggedIn)}</div>
-                    <div>role: {user?.role ?? "(none)"}</div>
-                    <button
-                        onClick={() => loadUsers()}
-                        className="ml-2 rounded-md border border-border px-2 py-1 text-[11px] hover:border-neon"
-                    >
-                        Reload users
-                    </button>
-                </div>
-            </div>
-
-            <div className="grid gap-3 rounded-xl border border-border bg-card p-4 shadow-sm lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
-                <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <h2 className="font-code text-base font-bold">
+                    <span className="text-muted-foreground">~/</span>users
+                </h2>
+                <div className="flex items-center gap-3">
                     <input
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search by username…"
-                        className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 font-code text-xs shadow-sm focus:border-neon focus:outline-none"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search users"
+                        className="rounded border border-border px-2 py-1 text-sm bg-transparent"
                     />
+                    <div className="w-48">
+                        <Select defaultValue={userSort} onValueChange={(v) => setUserSort(v as UserSort)}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="username_asc">Username ↑</SelectItem>
+                                <SelectItem value="username_desc">Username ↓</SelectItem>
+                                <SelectItem value="role">Role</SelectItem>
+                                <SelectItem value="suspended">Suspended</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <span className="font-code text-xs text-muted-foreground">{users.length} shown</span>
                 </div>
-
-                <Select
-                    value={roleFilter}
-                    onValueChange={(value) => setRoleFilter(value)}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All roles</SelectItem>
-                        <SelectItem value="ADMIN">Admin</SelectItem>
-                        <SelectItem value="MODERATOR">Moderator</SelectItem>
-                        <SelectItem value="USER">User</SelectItem>
-                    </SelectContent>
-                </Select>
-
-                <Select
-                    value={statusFilter}
-                    onValueChange={(value) => setStatusFilter(value)}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="suspended">Suspended</SelectItem>
-                    </SelectContent>
-                </Select>
-
-                <Select value={sortBy} onValueChange={(value) => setSortBy(value)}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Sort" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="username-asc">Username A-Z</SelectItem>
-                        <SelectItem value="username-desc">Username Z-A</SelectItem>
-                        <SelectItem value="role">Role</SelectItem>
-                        <SelectItem value="status">Status</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <div className="flex items-center justify-between font-code text-[11px] text-muted-foreground">
-                <div className="flex items-center gap-2">
-                    <UserCog className="h-3.5 w-3.5" />
-                    <span>
-                        {totalElements} matching users
-                    </span>
-                </div>
-                {hasFilters && (
-                    <button
-                        onClick={() => {
-                            setQuery("");
-                            setRoleFilter("all");
-                            setStatusFilter("all");
-                            setSortBy("username-asc");
-                        }}
-                        className="rounded-full border border-border px-2.5 py-0.5 hover:border-neon hover:text-neon"
-                    >
-                        Clear filters
-                    </button>
-                )}
             </div>
 
             {loading ? (
-                <div className="flex justify-center py-20">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-            ) : users.length === 0 ? (
-                <div className="mx-auto max-w-2xl py-12">
-                    <div className="rounded-xl border border-border bg-card p-6 text-center">
-                        <h3 className="font-code text-lg font-semibold text-foreground">No users found</h3>
-                        <p className="mt-2 font-code text-sm text-muted-foreground">
-                            The server returned no users. This may indicate an empty
-                            database or a problem with the API. Try reloading users
-                            or check the API endpoint.
-                        </p>
-                        <div className="mt-4 flex items-center justify-center gap-3">
-                            <button
-                                onClick={() => loadUsers()}
-                                className="rounded-md border border-border px-3 py-1 text-xs hover:border-neon"
-                            >
-                                Reload users
-                            </button>
-                            <a
-                                href="/api/users?page=0&size=1"
-                                className="rounded-md border border-border px-3 py-1 text-xs hover:border-neon"
-                            >
-                                Open API
-                            </a>
-                        </div>
-                    </div>
+                <div className="flex justify-center py-16">
+                    <Loader2 className="h-5 w-5 animate-spin text-neon" />
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-xl border border-border bg-card">
-                    <table className="w-full">
-                        <thead className="bg-surface font-code text-[11px] uppercase tracking-wider text-muted-foreground">
+                <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <table className="w-full font-code text-xs">
+                        <thead className="border-b border-border bg-surface/50">
                             <tr>
-                                <th className="px-4 py-3 text-left">User</th>
-                                <th className="px-4 py-3 text-left">Role</th>
-                                <th className="px-4 py-3 text-left">Status</th>
-                                <th className="px-4 py-3 text-right">Actions</th>
+                                {["Username", "Role", "Status", "Actions"].map(
+                                    (h) => (
+                                        <th
+                                            key={h}
+                                            className="px-4 py-3 text-left text-[10px] uppercase tracking-widest text-muted-foreground font-semibold"
+                                        >
+                                            {h}
+                                        </th>
+                                    ),
+                                )}
                             </tr>
                         </thead>
-                        <tbody>
-                            {visibleUsers.length === 0 ? (
-                                <tr>
-                                    <td
-                                        colSpan={4}
-                                        className="px-4 py-12 text-center font-code text-xs text-muted-foreground"
-                                    >
-                                        No users match the current filters.
+                        <tbody className="divide-y divide-border/50">
+                            {users.map((u) => (
+                                <tr
+                                    key={u.id}
+                                    className="hover:bg-surface/40 transition-colors"
+                                >
+                                    <td className="px-4 py-3 font-medium text-foreground">
+                                        @{u.username}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span
+                                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${ROLE_STYLE[u.role] ?? ROLE_STYLE.USER}`}
+                                        >
+                                            {u.role}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span
+                                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                                u.isSuspended
+                                                    ? "border-destructive/30 bg-destructive/10 text-destructive"
+                                                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                            }`}
+                                        >
+                                            <span
+                                                className={`h-1.5 w-1.5 rounded-full ${u.isSuspended ? "bg-destructive" : "bg-emerald-500"}`}
+                                            />
+                                            {u.isSuspended
+                                                ? "Suspended"
+                                                : "Active"}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-1.5">
+                                            {busyId === u.id ? (
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                            ) : (
+                                                <>
+                                                    {u.role === "USER" && (
+                                                        <button
+                                                            onClick={() =>
+                                                                promote(u)
+                                                            }
+                                                            title="Promote to Moderator"
+                                                            className="rounded border border-amber-500/30 bg-amber-500/8 px-2 py-1 text-[10px] text-amber-600 hover:bg-amber-500/15 transition-colors"
+                                                        >
+                                                            <ShieldCheck className="h-3 w-3 inline mr-1" />
+                                                            Promote
+                                                        </button>
+                                                    )}
+                                                    {u.role === "MODERATOR" && (
+                                                        <button
+                                                            onClick={() =>
+                                                                demote(u)
+                                                            }
+                                                            title="Demote to User"
+                                                            className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground hover:border-neon hover:text-neon transition-colors"
+                                                        >
+                                                            <ShieldOff className="h-3 w-3 inline mr-1" />
+                                                            Demote
+                                                        </button>
+                                                    )}
+                                                    {u.isSuspended ? (
+                                                        <button
+                                                            onClick={() =>
+                                                                unsuspend(u)
+                                                            }
+                                                            title="Unsuspend"
+                                                            className="rounded border border-emerald-500/30 bg-emerald-500/8 px-2 py-1 text-[10px] text-emerald-600 hover:bg-emerald-500/15 transition-colors"
+                                                        >
+                                                            <UserCheck className="h-3 w-3 inline mr-1" />
+                                                            Unsuspend
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() =>
+                                                                suspend(u)
+                                                            }
+                                                            title="Suspend"
+                                                            className="rounded border border-orange-500/30 bg-orange-500/8 px-2 py-1 text-[10px] text-orange-600 hover:bg-orange-500/15 transition-colors"
+                                                        >
+                                                            <UserX className="h-3 w-3 inline mr-1" />
+                                                            Suspend
+                                                        </button>
+                                                    )}
+                                                    {u.role !== "ADMIN" && (
+                                                        <button
+                                                            onClick={() =>
+                                                                setDeleteTarget(
+                                                                    u,
+                                                                )
+                                                            }
+                                                            title="Delete user"
+                                                            className="rounded border border-destructive/30 bg-destructive/8 p-1 text-destructive hover:bg-destructive/15 transition-colors"
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
-                            ) : (
-                                visibleUsers.map((u) => (
-                                    <tr
-                                        key={u.id}
-                                        className="border-t border-border font-code text-xs"
-                                    >
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                                                    {u.username.slice(0, 2).toUpperCase()}
-                                                </div>
-                                                <span>@{u.username}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="rounded-full border border-border bg-surface px-2 py-0.5 text-[10px]">
-                                                {u.role}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span
-                                                className={`rounded-full border px-2 py-0.5 font-code text-[10px] ${
-                                                    u.isSuspended
-                                                        ? "border-destructive/40 bg-destructive/10 text-destructive"
-                                                        : "border-green-500/40 bg-green-500/10 text-green-500"
-                                                }`}
-                                            >
-                                                {u.isSuspended ? "suspended" : "active"}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-1.5">
-                                                {u.role === "USER" && (
-                                                    <button
-                                                        onClick={() => promote(u.id)}
-                                                        className="rounded-md border border-blue-500/40 px-2 py-1 text-blue-500 hover:bg-blue-500/10"
-                                                    >
-                                                        Promote
-                                                    </button>
-                                                )}
-                                                {u.role === "MODERATOR" && (
-                                                    <button
-                                                        onClick={() => demote(u.id)}
-                                                        className="rounded-md border border-border px-2 py-1 text-muted-foreground hover:border-neon hover:text-neon"
-                                                    >
-                                                        Demote
-                                                    </button>
-                                                )}
-                                                {!u.isSuspended && u.role !== "ADMIN" && (
-                                                    <button
-                                                        onClick={() => suspend(u.id)}
-                                                        className="rounded-md border border-destructive/40 px-2 py-1 text-destructive hover:bg-destructive/10"
-                                                    >
-                                                        Suspend
-                                                    </button>
-                                                )}
-                                                {u.isSuspended && u.role !== "ADMIN" && (
-                                                    <button
-                                                        onClick={() => unsuspend(u.id)}
-                                                        className="rounded-md border border-emerald-500/40 px-2 py-1 text-emerald-500 hover:bg-emerald-500/10"
-                                                    >
-                                                        Unsuspend
-                                                    </button>
-                                                )}
-                                                {u.role !== "ADMIN" && (
-                                                    <button
-                                                        onClick={() => removeUser(u.id)}
-                                                        className="rounded-md border border-destructive/40 px-2 py-1 text-destructive hover:bg-destructive/10"
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
+                            ))}
                         </tbody>
                     </table>
                 </div>
             )}
 
-            {totalPages > 1 && !loading && (
-                <div className="flex items-center justify-center gap-2 font-code text-xs">
+            {totalPages > 1 && (
+                <div className="flex justify-center gap-2 font-code text-xs">
                     <button
-                        disabled={safePage === 0}
-                        onClick={() => setPage((p) => Math.max(0, p - 1))}
-                        className="rounded-md border border-border px-3 py-1 disabled:opacity-40 hover:border-neon"
+                        disabled={page === 0}
+                        onClick={() => setPage((p) => p - 1)}
+                        className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:border-neon"
                     >
-                        ← prev
+                        ← Prev
                     </button>
-                    <span className="text-muted-foreground">
-                        page {safePage + 1} / {totalPages}
+                    <span className="px-2 py-1.5 text-muted-foreground">
+                        {page + 1} / {totalPages}
                     </span>
                     <button
-                        disabled={safePage >= totalPages - 1}
+                        disabled={page >= totalPages - 1}
                         onClick={() => setPage((p) => p + 1)}
-                        className="rounded-md border border-border px-3 py-1 disabled:opacity-40 hover:border-neon"
+                        className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:border-neon"
                     >
-                        next →
+                        Next →
                     </button>
                 </div>
             )}
+
+            <AlertDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Delete @{deleteTarget?.username}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This permanently removes the account and all their
+                            content. This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete account
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

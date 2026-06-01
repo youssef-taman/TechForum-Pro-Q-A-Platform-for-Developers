@@ -159,7 +159,7 @@ function AskPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-4xl gap-6 lg:grid-cols-[1fr_320px]">
+    <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_360px]">
       <section className="rounded-xl border border-border bg-card p-6">
         <h1 className="font-code text-2xl font-bold">
           <span className="text-muted-foreground">~/</span>ask-question
@@ -197,7 +197,7 @@ function AskPage() {
                 {body ? <Markdown content={body} /> : <p className="font-code text-xs text-muted-foreground">Nothing to preview yet…</p>}
               </div>
             ) : (
-              <textarea rows={10} value={body} onChange={(e) => setBody(e.target.value)}
+              <textarea rows={12} value={body} onChange={(e) => setBody(e.target.value)}
                 placeholder="Describe your problem in detail. Use markdown for code blocks…"
                 className="w-full resize-y rounded-lg border border-input bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none" />
             )}

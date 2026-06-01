@@ -23,6 +23,9 @@ import { Route as ModeratorQueueRouteImport } from './routes/moderator.queue'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as TagsRouteImport } from './routes/tags'
 import { Route as TagsTagRouteImport } from './routes/tags.$tag'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as HelpRouteImport } from './routes/help'
+import { Route as TourRouteImport } from './routes/tour'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -95,6 +98,22 @@ const TagsTagRoute = TagsTagRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TourRoute = TourRouteImport.update({
+  id: '/tour',
+  path: '/tour',
+  getParentRoute: () => rootRouteImport,
+} as any)
+
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
@@ -110,6 +129,9 @@ export interface FileRoutesByFullPath {
   '/questions/$id': typeof QuestionsIdRoute
   '/tags': typeof TagsRoute
   '/tags/$tag': typeof TagsTagRoute
+  '/about': typeof AboutRoute
+  '/help': typeof HelpRoute
+  '/tour': typeof TourRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,6 +148,9 @@ export interface FileRoutesByTo {
   '/questions/$id': typeof QuestionsIdRoute
   '/tags': typeof TagsRoute
   '/tags/$tag': typeof TagsTagRoute
+  '/about': typeof AboutRoute
+  '/help': typeof HelpRoute
+  '/tour': typeof TourRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,6 +168,9 @@ export interface FileRoutesById {
   '/questions/$id': typeof QuestionsIdRoute
   '/tags': typeof TagsRoute
   '/tags/$tag': typeof TagsTagRoute
+  '/about': typeof AboutRoute
+  '/help': typeof HelpRoute
+  '/tour': typeof TourRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -161,6 +189,9 @@ export interface FileRouteTypes {
     | '/questions/$id'
     | '/tags'
     | '/tags/$tag'
+    | '/about'
+    | '/help'
+    | '/tour'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -177,6 +208,9 @@ export interface FileRouteTypes {
     | '/questions/$id'
     | '/tags'
     | '/tags/$tag'
+      | '/about'
+      | '/help'
+      | '/tour'
   id:
     | '__root__'
     | '/'
@@ -191,6 +225,9 @@ export interface FileRouteTypes {
     | '/questions/$id'
     | '/tags'
     | '/tags/$tag'
+      | '/about'
+      | '/help'
+      | '/tour'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -207,6 +244,9 @@ export interface RootRouteChildren {
   QuestionsIdRoute: typeof QuestionsIdRoute
   TagsRoute: typeof TagsRoute
   TagsTagRoute: typeof TagsTagRoute
+  AboutRoute: typeof AboutRoute
+  HelpRoute: typeof HelpRoute
+  TourRoute: typeof TourRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -302,6 +342,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TagsTagRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tour': {
+      id: '/tour'
+      path: '/tour'
+      fullPath: '/tour'
+      preLoaderRoute: typeof TourRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/users': {
       id: '/admin/users'
       path: '/users'
@@ -336,6 +397,9 @@ const rootRouteChildren: RootRouteChildren = {
   QuestionsIdRoute: QuestionsIdRoute,
   TagsRoute: TagsRoute,
   TagsTagRoute: TagsTagRoute,
+  AboutRoute: AboutRoute,
+  HelpRoute: HelpRoute,
+  TourRoute: TourRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

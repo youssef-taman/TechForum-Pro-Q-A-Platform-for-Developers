@@ -1,5 +1,12 @@
 import {createFileRoute, Link} from "@tanstack/react-router";
 import {useEffect, useState} from "react";
+import {
+    Select,
+    SelectTrigger,
+    SelectValue,
+    SelectContent,
+    SelectItem,
+} from "@/components/ui/select";
 import {toast} from "sonner";
 import {
     CheckCircle2,
@@ -25,6 +32,8 @@ function ModQueue() {
     const [threads, setThreads] = useState<Thread[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionId, setActionId] = useState<string | null>(null);
+    type ThreadSort = "latest" | "oldest" | "most_commented";
+    const [threadSort, setThreadSort] = useState<ThreadSort>("latest");
 
     const isMod =
         isLoggedIn &&
@@ -37,13 +46,25 @@ function ModQueue() {
             return;
         }
         setLoading(true);
-        apiFetch<Page<Thread>>(
-            `${API_ENDPOINTS.threads}?status=OPEN&size=20&sortBy=latest`,
-        )
-            .then((data) => setThreads(data.content))
-            .catch(() => toast.error("Failed to load queue"))
-            .finally(() => setLoading(false));
-    }, [isMod]);
+        const fetchAndMaybeSort = async () => {
+            try {
+                const sortParam = threadSort === "oldest" ? "older" : "latest";
+                const data = await apiFetch<Page<Thread>>(
+                    `${API_ENDPOINTS.threads}?status=OPEN&size=50&sortBy=${sortParam}`,
+                );
+                let items = data.content;
+                if (threadSort === "most_commented") {
+                    items = items.sort((a, b) => (b.numberComments ?? 0) - (a.numberComments ?? 0));
+                }
+                setThreads(items);
+            } catch {
+                toast.error("Failed to load queue");
+            } finally {
+                setLoading(false);
+            }
+        };
+        void fetchAndMaybeSort();
+    }, [isMod, threadSort]);
 
     const act = async (id: string, fn: () => Promise<void>) => {
         setActionId(id);
@@ -102,12 +123,27 @@ function ModQueue() {
                         mod-queue
                     </h1>
                     <p className="font-code text-xs text-muted-foreground">
-                        {loading ? "Loading…" : `${threads.length} items`}
+                        {threads.length === 0 && loading ? "Loading…" : `${threads.length} items`}
+                        {loading && threads.length > 0 && (
+                            <Loader2 className="ml-2 inline-block h-4 w-4 animate-spin text-neon" />
+                        )}
                     </p>
+                </div>
+                <div className="ml-auto w-48">
+                    <Select defaultValue={threadSort} onValueChange={(v) => setThreadSort(v as ThreadSort)}>
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="latest">Latest</SelectItem>
+                            <SelectItem value="oldest">Oldest</SelectItem>
+                            <SelectItem value="most_commented">Most commented</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 
-            {loading ? (
+            {loading && threads.length === 0 ? (
                 <div className="flex justify-center py-20">
                     <Loader2 className="h-6 w-6 animate-spin text-neon" />
                 </div>
@@ -128,7 +164,8 @@ function ModQueue() {
                         return (
                             <div
                                 key={item.id}
-                                className="rounded-xl border border-border bg-card p-5 shadow-sm"
+                                className="rounded-xl border border-border bg-card p-5 shadow-sm transform-gpu transition-transform duration-150 ease-out hover:-translate-y-1 hover:shadow-md"
+                                style={{willChange: "transform"}}
                             >
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="min-w-0 flex-1">

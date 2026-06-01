@@ -1,6 +1,7 @@
 import {Outlet} from "@tanstack/react-router";
 import {Navbar} from "@/components/Navbar";
 import {Toaster} from "@/components/ui/sonner";
+import {Layers3} from "lucide-react";
 
 export function Layout() {
     return (
@@ -32,10 +33,8 @@ export function Layout() {
                         {/* Brand */}
                         <div className="space-y-4">
                             <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-neon/20 bg-neon/10 text-neon shadow-sm">
-                                    <span className="font-code text-sm font-bold">
-                                        TF
-                                    </span>
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-neon/20 bg-linear-to-br from-neon/15 to-primary/10 text-neon shadow-sm">
+                                    <Layers3 className="h-5 w-5" />
                                 </div>
                                 <div>
                                     <p className="font-code text-sm font-semibold text-foreground">
@@ -165,6 +164,30 @@ export function Layout() {
                                         className="font-code text-xs text-muted-foreground transition-colors hover:text-neon"
                                     >
                                         Reset password
+                                    </a>
+                                </li>
+                                <li>
+                                    <a
+                                        href="/about"
+                                        className="font-code text-xs text-muted-foreground transition-colors hover:text-neon"
+                                    >
+                                        About us
+                                    </a>
+                                </li>
+                                <li>
+                                    <a
+                                        href="/help"
+                                        className="font-code text-xs text-muted-foreground transition-colors hover:text-neon"
+                                    >
+                                        Help center
+                                    </a>
+                                </li>
+                                <li>
+                                    <a
+                                        href="/tour"
+                                        className="font-code text-xs text-muted-foreground transition-colors hover:text-neon"
+                                    >
+                                        Tour
                                     </a>
                                 </li>
                             </ul>

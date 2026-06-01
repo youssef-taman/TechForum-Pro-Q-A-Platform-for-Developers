@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TechForum Pro">
+  <defs>
+    <linearGradient id="g" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7CFC98"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#08101A"/>
+  <rect x="10" y="10" width="44" height="44" rx="14" fill="url(#g)" opacity="0.16"/>
+  <rect x="14" y="14" width="36" height="36" rx="11" fill="url(#g)"/>
+  <path d="M23 22 15 32l8 10" stroke="#08101A" stroke-width="4.6" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M41 22l8 10-8 10" stroke="#08101A" stroke-width="4.6" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M31.5 20 28 44" stroke="#08101A" stroke-width="4.6" stroke-linecap="square"/>
+</svg>

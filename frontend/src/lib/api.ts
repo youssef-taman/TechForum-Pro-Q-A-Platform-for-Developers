@@ -5,10 +5,9 @@ export const API_ENDPOINTS = {
     login: `${API_BASE_URL}/auth/login`,
     register: `${API_BASE_URL}/auth/register`,
     logout: `${API_BASE_URL}/auth/logout`,
-
     requestPasswordReset: `${API_BASE_URL}/auth/password-reset/request`,
     confirmPasswordReset: `${API_BASE_URL}/auth/password-reset/confirm`,
-
+    changePassword: `${API_BASE_URL}/auth/change-password`, // ← new authenticated endpoint
     requestEmailVerification: `${API_BASE_URL}/auth/email-verification/request`,
     confirmEmailVerification: `${API_BASE_URL}/auth/email-verification/confirm`,
 
@@ -16,31 +15,30 @@ export const API_ENDPOINTS = {
     promote: (id: string) => `${API_BASE_URL}/users/${id}/promote`,
     demote: (id: string) => `${API_BASE_URL}/users/${id}/demote`,
     suspend: (id: string) => `${API_BASE_URL}/users/${id}/suspend`,
-    unsuspend: (id: string) => `${API_BASE_URL}/users/${id}/unsuspend`,
+    unsuspend: (id: string) => `${API_BASE_URL}/users/${id}/unsuspend`, // ← new
     deleteUser: (id: string) => `${API_BASE_URL}/users/${id}`,
     users: `${API_BASE_URL}/users`,
-    adminMetrics: `${API_BASE_URL}/admin/metrics`,
 
     // Threads
     threads: `${API_BASE_URL}/threads`,
-    threadTagRecommendations: `${API_BASE_URL}/threads/ai/tags`,
-    threadDuplicateCheck: `${API_BASE_URL}/threads/ai/duplicates`,
+    threadById: (id: string) => `${API_BASE_URL}/threads/${id}`,
     threadExpand: (username: string, id: string) =>
         `${API_BASE_URL}/threads/${username}/${id}`,
-    threadById: (id: string) => `${API_BASE_URL}/threads/${id}`,
     userThreads: (username: string) =>
         `${API_BASE_URL}/threads/user/${username}`,
     threadSearch: `${API_BASE_URL}/threads/search`,
+    threadTagRecommendations: `${API_BASE_URL}/threads/ai/tags`,
+    threadDuplicateCheck: `${API_BASE_URL}/threads/ai/duplicates`,
 
-    // Tags (NEW - To fetch tags for the "Ask Question" form)
+    // Tags
     tags: `${API_BASE_URL}/tags`,
 
     // Comments
-    commentsBase: `${API_BASE_URL}/comments`, // NEW - Use this for POST (creating comments)
-    comments: (threadId: string) => `${API_BASE_URL}/comments/${threadId}`, // Use this for GET (fetching comments)
+    commentsBase: `${API_BASE_URL}/comments`,
+    comments: (threadId: string) => `${API_BASE_URL}/comments/${threadId}`,
     commentReplies: (commentId: string) =>
         `${API_BASE_URL}/comments/${commentId}/replies`,
-    commentById: (commentId: string) => `${API_BASE_URL}/comments/${commentId}`, // Use this for PATCH/DELETE
+    commentById: (commentId: string) => `${API_BASE_URL}/comments/${commentId}`,
 
     // Interactions
     bookmarks: `${API_BASE_URL}/interactions/bookmarks`,
@@ -48,6 +46,11 @@ export const API_ENDPOINTS = {
         `${API_BASE_URL}/interactions/bookmarks/${threadId}`,
     voteComment: (commentId: string) =>
         `${API_BASE_URL}/interactions/comments/${commentId}/votes`,
+    // Notifications
+    notifications: `${API_BASE_URL}/notifications`,
+    markNotificationRead: (id: string) => `${API_BASE_URL}/notifications/${id}/read`,
+    markAllNotificationsRead: `${API_BASE_URL}/notifications/read`,
+    notificationsStream: `${API_BASE_URL}/notifications/stream`,
 } as const;
 
 const TOKEN_KEY = "tf_access_token";
@@ -60,18 +63,12 @@ export interface StoredUser {
     isSuspended?: boolean;
 }
 
-export type AuthActionResponse = {
-    message: string;
-    token?: string | null;
-};
-
-export interface AuthResponse {
+export type AuthResponse = {
     accessToken: string;
     username: string;
     email: string;
     role: string;
-    isSuspended?: boolean;
-}
+};
 
 export function saveAuth(token: string, user: StoredUser) {
     if (typeof window === "undefined") return;
@@ -92,99 +89,49 @@ export function getToken(): string | null {
 
 export function getStoredUser(): StoredUser | null {
     if (typeof window === "undefined") return null;
-
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
-
     try {
-        return JSON.parse(raw) as StoredUser;
+        return JSON.parse(raw);
     } catch {
-        clearAuth();
         return null;
     }
 }
 
-export function getAuthHeader(): Record<string, string> {
-    const token = getToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-function isJsonContentType(contentType: string | null) {
-    return contentType?.toLowerCase().includes("application/json") ?? false;
-}
-
-async function readErrorMessage(res: Response): Promise<string> {
-    const fallback = `Request failed with status ${res.status}`;
-
-    const contentType = res.headers.get("content-type");
-    const text = await res.text().catch(() => "");
-
-    if (!text) return fallback;
-
-    if (!isJsonContentType(contentType)) {
-        return text;
-    }
-
-    try {
-        const body = JSON.parse(text);
-        return (
-            body?.message ||
-            body?.error ||
-            body?.detail ||
-            body?.title ||
-            fallback
-        );
-    } catch {
-        return fallback;
-    }
-}
-
-function handleUnauthorized() {
-    clearAuth();
-
-    if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("techforum:auth-expired"));
-    }
-}
-
 export async function apiFetch<T = unknown>(
-    endpoint: string,
+    url: string,
     options: RequestInit = {},
 ): Promise<T> {
-    const headers = new Headers(options.headers);
-    if (!headers.has("Content-Type") && options.body !== undefined) {
-        headers.set("Content-Type", "application/json");
-    }
-
     const token = getToken();
-    if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-    }
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(token ? {Authorization: `Bearer ${token}`} : {}),
+        ...((options.headers as Record<string, string>) ?? {}),
+    };
 
-    const res = await fetch(endpoint, {
-        ...options,
-        headers,
-    });
+    const res = await fetch(url, {...options, headers});
+
+    if (res.status === 401 || res.status === 403) {
+        // Token expired or invalid — clear session and redirect
+        clearAuth();
+        if (
+            typeof window !== "undefined" &&
+            !window.location.pathname.startsWith("/login")
+        ) {
+            window.location.href = "/login";
+        }
+    }
 
     if (!res.ok) {
-        const message = await readErrorMessage(res);
-
-        if (res.status === 401) {
-            handleUnauthorized();
-        }
-
-        throw new Error(message);
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(text || `HTTP ${res.status}`);
     }
 
-    const contentType = res.headers.get("content-type");
-    if (!isJsonContentType(contentType)) {
-        return undefined as T;
-    }
+    if (res.status === 204) return null as T;
 
-
-    if (res.status === 204) {
-        return undefined as T;
-    }
-
-    return await res.json() as Promise<T>;
+    const contentType = res.headers.get("content-type") ?? "";
+    const text = await res.text();
+    if (!text.trim()) return null as T;
+    if (contentType.includes("application/json")) return JSON.parse(text) as T;
+    return text as T;
 }

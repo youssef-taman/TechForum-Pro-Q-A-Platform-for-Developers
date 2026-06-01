@@ -90,7 +90,7 @@ function BookmarksPage() {
     }, [isLoggedIn, page]);
 
     // Fetch thread bodies
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     useEffect(() => {
         if (!bookmarks.length) return;
         const idsToFetch = bookmarks.map((b) => b.threadId);
@@ -103,10 +103,10 @@ function BookmarksPage() {
         ).then((results) => {
             results.forEach((r) => addThreadBody(r.id, r.body ?? ""));
         });
-    }, [bookmarks]);
+    }, [bookmarks, addThreadBody]);
 
     // Prefetch next pages
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     useEffect(() => {
         if (!isLoggedIn) return;
         const nextPage = page + 1;
@@ -165,7 +165,7 @@ function BookmarksPage() {
         return () => {
             cancelled = true;
         };
-    }, [page, totalPages, isLoggedIn]);
+    }, [page, totalPages, isLoggedIn, PREFETCH_AHEAD, addThreadBody]);
 
     const removeBookmark = async (threadId: string) => {
         try {

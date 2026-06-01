@@ -22,7 +22,7 @@ import {useCallback, useEffect, useState} from "react";
 import {toast} from "sonner";
 import {StatusBadge} from "@/components/StatusBadge";
 import {Markdown} from "@/components/Markdown";
-import {decodeQuotedLiteral} from "@/components/Markdown";
+import {decodeQuotedLiteral} from "@/lib/markdown";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import {useAuth} from "@/lib/auth-context";
 import type {Thread, Comment, Bookmark as BookmarkType, Page} from "@/types";
@@ -140,8 +140,10 @@ async function loadCommentTree(
     sortBy: "latest" | "oldest" | "top" = "latest",
 ) {
     const pageSize = 10;
+    const backendSort =
+        sortBy === "oldest" ? "older" : sortBy === "top" ? "top score" : "latest";
     const data = await apiFetch<Page<Comment>>(
-        `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=${sortBy}`,
+        `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=${backendSort}`,
     );
 
     const tree = data.content.map((comment) => ({
@@ -150,6 +152,38 @@ async function loadCommentTree(
     }));
 
     return {tree, totalPages: data.totalPages};
+}
+
+function updateAncestorCounts(
+    nodes: CommentNode[],
+    targetId: string,
+    delta: number,
+): CommentNode[] {
+    let changed = false;
+    const result = nodes.map((node) => {
+        if (node.id === targetId) {
+            changed = true;
+            return {...node, totalReplies: (node.totalReplies ?? node.replyCount) + delta};
+        }
+
+        const updatedReplies = updateAncestorCounts(node.replies, targetId, delta);
+        if (updatedReplies !== node.replies) {
+            changed = true;
+            return {...node, replies: updatedReplies, totalReplies: (node.totalReplies ?? node.replyCount) + delta};
+        }
+
+        return node;
+    });
+    return result;
+}
+
+function countDescendants(nodes: CommentNode[]): number {
+    let total = 0;
+    for (const n of nodes) {
+        total += 1;
+        if (n.replies && n.replies.length > 0) total += countDescendants(n.replies);
+    }
+    return total;
 }
 
 /* ─── Depth-aware reply node ─── */
@@ -180,7 +214,7 @@ interface CommentHandlers {
     isAiComment: (c: Comment) => boolean;
 }
 
-const MAX_DEPTH = 5;
+const MAX_DEPTH = 4;
 
 function CommentCard({
     comment,
@@ -329,9 +363,9 @@ function CommentCard({
                         <span className="text-muted-foreground">
                             {relativeTime(comment.createdAt)}
                         </span>
-                        {comment.replyCount > 0 && (
+                        {((comment.totalReplies ?? comment.replyCount) > 0) && (
                             <span className="text-muted-foreground/60">
-                                {comment.replyCount} replies
+                                {comment.totalReplies ?? comment.replyCount} replies
                             </span>
                         )}
                         {comment.parentId && (
@@ -442,7 +476,7 @@ function CommentCard({
                     )}
 
                     {/* Toggle + nested replies */}
-                    {comment.replyCount > 0 && (
+                    {((comment.totalReplies ?? comment.replyCount) > 0) && (
                         <div className="mt-2">
                             <button
                                 type="button"
@@ -456,7 +490,7 @@ function CommentCard({
                                 )}
                                 {expandedReplies[comment.id]
                                     ? `Hide replies`
-                                    : `${comment.replyCount} ${comment.replyCount === 1 ? "reply" : "replies"}`}
+                                    : `${comment.totalReplies ?? comment.replyCount} ${((comment.totalReplies ?? comment.replyCount) === 1) ? "reply" : "replies"}`}
                             </button>
 
                             {expandedReplies[comment.id] && (
@@ -571,7 +605,7 @@ function QuestionDetail() {
 
         if (
             !nextExpanded ||
-            comment.replyCount === 0 ||
+            (comment.totalReplies ?? comment.replyCount) === 0 ||
             comment.replies.length > 0
         )
             return;
@@ -579,12 +613,24 @@ function QuestionDetail() {
         setLoadingReplies((current) => ({...current, [comment.id]: true}));
         try {
             const replies = await loadReplyTree(comment.id);
-            setComments((current) =>
-                updateCommentTree(current, comment.id, (node) => ({
-                    ...node,
-                    replies,
-                })),
-            );
+                // compute total descendant reply count (include nested replies)
+                const countDescendants = (nodes: CommentNode[]): number => {
+                    let total = 0;
+                    for (const n of nodes) {
+                        total += 1; // this reply
+                        if (n.replies && n.replies.length > 0) total += countDescendants(n.replies);
+                    }
+                    return total;
+                };
+                const totalReplies = countDescendants(replies);
+
+                setComments((current) =>
+                    updateCommentTree(current, comment.id, (node) => ({
+                        ...node,
+                        replies,
+                        totalReplies: totalReplies,
+                    })),
+                );
         } catch {
             toast.error("Failed to load replies");
         } finally {
@@ -712,7 +758,15 @@ function QuestionDetail() {
             await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), {
                 method: "DELETE",
             });
-            setComments((prev) => removeCommentFromTree(prev, commentDeleteId));
+            // compute deleted node descendant count to update ancestor counts and thread total
+            const nodeToDelete = findCommentNode(comments, commentDeleteId);
+            const removedCount = nodeToDelete ? 1 + countDescendants(nodeToDelete.replies) : 1;
+            setComments((prev) => {
+                const removed = removeCommentFromTree(prev, commentDeleteId);
+                // decrement ancestor reply counts by removedCount
+                return updateAncestorCounts(removed, commentDeleteId, -removedCount);
+            });
+            if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments - removedCount}));
             toast.success("Comment deleted");
             setCommentDeleteId(null);
         } catch (err) {
@@ -845,20 +899,45 @@ function QuestionDetail() {
             toast.error("Comment too short");
             return;
         }
+        // optimistic top-level comment: insert locally before server response
+        const tempId = typeof globalThis.crypto?.randomUUID === "function"
+            ? globalThis.crypto.randomUUID()
+            : `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const tempComment: CommentNode = {
+            id: tempId,
+            parentId: null,
+            threadId: id,
+            authorName: user?.username ?? "You",
+            content: newComment.trim(),
+            replyCount: 0,
+            totalReplies: 0,
+            score: 0,
+            createdAt: new Date().toISOString(),
+            replies: [],
+        };
+
+        const prevComments = comments;
+        const prevThread = thread;
+        setComments((cur) => [tempComment, ...cur]);
+        if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments + 1}));
+        setNewComment("");
         setSubmitting(true);
         try {
             await apiFetch<Comment>(API_ENDPOINTS.commentsBase, {
                 method: "POST",
                 body: JSON.stringify({
                     threadId: id,
-                    content: newComment.trim(),
+                    content: tempComment.content,
                     parentId: null,
                 }),
             });
-            setNewComment("");
             toast.success("Comment posted");
             await reloadComments();
         } catch (err) {
+            // rollback optimistic update
+            setComments(prevComments);
+            if (prevThread) setThread(prevThread);
+            setNewComment(tempComment.content);
             toast.error(err instanceof Error ? err.message : "Failed");
         } finally {
             setSubmitting(false);
@@ -874,6 +953,12 @@ function QuestionDetail() {
             toast.error("Reply too short");
             return;
         }
+        // optimistic increment of ancestor reply counts and thread comment count
+        const prevComments = comments;
+        const prevThread = thread;
+        setComments((cur) => updateAncestorCounts(cur, parentId, 1));
+        if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments + 1}));
+
         try {
             await apiFetch<Comment>(API_ENDPOINTS.commentsBase, {
                 method: "POST",
@@ -888,6 +973,9 @@ function QuestionDetail() {
             toast.success("Reply posted");
             await reloadComments();
         } catch (err) {
+            // rollback optimistic update
+            setComments(prevComments);
+            if (prevThread) setThread(prevThread);
             toast.error(err instanceof Error ? err.message : "Failed");
         }
     };
@@ -1034,8 +1122,8 @@ function QuestionDetail() {
     }
 
     return (
-        <div className="mx-auto grid max-w-4xl gap-6 lg:grid-cols-[1fr_280px]">
-            <section className="min-w-0 space-y-5">
+        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_360px]">
+            <section className="min-w-0 space-y-6">
                 <Link
                     to="/"
                     className="inline-flex items-center gap-1.5 font-code text-xs text-muted-foreground hover:text-neon"
@@ -1044,12 +1132,12 @@ function QuestionDetail() {
                 </Link>
 
                 {/* Thread card */}
-                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+                <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
                     <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={thread.status} />
                         {thread.tags?.map((tag) => (
                             <Link
-                                key={tag.id}
+                                key={tag.name}
                                 to="/tags/$tag"
                                 params={{tag: tag.name}}
                                 className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-0.5 font-code text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"
@@ -1060,15 +1148,15 @@ function QuestionDetail() {
                         ))}
                     </div>
 
-                    <h1 className="mt-4 text-xl font-bold leading-snug text-foreground sm:text-2xl">
+                    <h1 className="mt-6 text-xl font-bold leading-snug text-foreground sm:text-2xl">
                         {thread.title}
                     </h1>
 
-                    <div className="mt-5 prose prose-sm dark:prose-invert max-w-none">
+                    <div className="mt-6 prose prose-sm dark:prose-invert max-w-none">
                         <Markdown content={thread.body} />
                     </div>
 
-                    <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-4 font-code text-xs">
+                    <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-border pt-5 font-code text-sm">
                         <div className="flex items-center gap-1.5 text-muted-foreground">
                             <UserIcon className="h-3 w-3" />
                             <span className="text-neon font-medium">
@@ -1396,7 +1484,7 @@ function QuestionDetail() {
                     )}
 
                     {/* Add comment */}
-                    <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                    <div className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
                         <h3 className="mb-3 font-code text-sm font-semibold text-foreground">
                             {isLoggedIn
                                 ? `Comment as @${user?.username}`
@@ -1497,7 +1585,7 @@ function QuestionDetail() {
                                 <dd className="mt-1.5 flex flex-wrap gap-1">
                                     {thread.tags.map((tag) => (
                                         <Link
-                                            key={tag.id}
+                                            key={tag.name}
                                             to="/tags/$tag"
                                             params={{tag: tag.name}}
                                             className="rounded border border-border bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground transition-colors hover:border-neon hover:text-neon"

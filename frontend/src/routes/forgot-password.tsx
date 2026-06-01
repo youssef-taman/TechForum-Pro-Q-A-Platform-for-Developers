@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, KeyRound, Loader2, Mail, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { apiFetch, API_ENDPOINTS, type AuthActionResponse } from "@/lib/api";``
+import { apiFetch, API_ENDPOINTS } from "@/lib/api";
 
 type ResetResponse = {
   message: string;

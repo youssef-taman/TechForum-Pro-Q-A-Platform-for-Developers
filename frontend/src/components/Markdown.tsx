@@ -4,33 +4,13 @@ import remarkGfm from "remark-gfm";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import {CodeRunner} from "@/components/CodeRunner";
+import {decodeQuotedLiteral} from "@/lib/markdown";
 
 type MarkdownProps = {
   content: string;
   compact?: boolean;
   readOnly?: boolean;
 };
-
-export function decodeQuotedLiteral(content: string) {
-  const trimmed = content.trim();
-
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (typeof parsed === "string") {
-        return parsed;
-      }
-    } catch {
-      return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, '"');
-    }
-  }
-
-  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\'/g, "'");
-  }
-
-  return content;
-}
 
 function normalizeMarkdownContent(content: string) {
   const decoded = decodeQuotedLiteral(content);
