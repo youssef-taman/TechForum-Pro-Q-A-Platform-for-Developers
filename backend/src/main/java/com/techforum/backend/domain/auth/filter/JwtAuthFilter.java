@@ -67,6 +67,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     String authHeader = request.getHeader(AUTH_HEADER);
 
     if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+      // Fallback: allow token via query parameter for transports that can't set headers
+      // (SSE/EventSource)
+      String param = request.getParameter("access_token");
+      if (param != null && !param.isBlank()) {
+        return Optional.of(param.trim());
+      }
       return Optional.empty();
     }
 
