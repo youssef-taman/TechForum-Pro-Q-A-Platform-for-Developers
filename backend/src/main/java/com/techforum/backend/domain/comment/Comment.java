@@ -51,11 +51,7 @@ public class Comment extends BaseEntity {
   @CreationTimestamp
   private Instant createdAt;
 
-  @OneToMany(
-      mappedBy = "parent",
-      cascade = CascadeType.ALL,
-      orphanRemoval = true,
-      fetch = FetchType.LAZY)
+  @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, orphanRemoval = true)
   @Builder.Default
   private Set<Comment> replies = new HashSet<>();
 }
