@@ -1,6 +1,6 @@
 package com.techforum.backend.domain.auth.handler;
 
-import com.techforum.backend.common.response.ApiErrorResponse;
+import com.techforum.backend.common.exception.response.ApiErrorResponse;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
