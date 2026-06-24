@@ -16,6 +16,7 @@
         <java.version>21</java.version>
         <spring-ai.version>2.0.0-M4</spring-ai.version>
         <spring-cloud.version>2025.1.1</spring-cloud.version>
+        <jedis.version>7.5.2</jedis.version>
     </properties>
 
     <dependencies>
@@ -55,6 +56,18 @@
                     <artifactId>spring-boot-starter-logging</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.redis.om</groupId>
+            <artifactId>redis-om-spring</artifactId>
+            <version>2.0.6</version>
+        </dependency>
+
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>7.5.2</version>
         </dependency>
 
         <dependency>

@@ -20,6 +20,11 @@ public class ThreadController {
 
   private final ThreadService threadService;
 
+  @PostMapping("/suggest-tags")
+  public String[] suggestTags(@RequestBody String title, @RequestBody String body) {
+    return threadService.suggestTags(title, body);
+  }
+
   @PostMapping
   public ResponseEntity<ThreadDTO> createThread(
       @Valid @RequestBody ThreadCreateDTO threadCreateDTO,

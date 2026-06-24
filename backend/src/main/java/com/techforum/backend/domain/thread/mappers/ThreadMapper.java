@@ -2,9 +2,7 @@ package com.techforum.backend.domain.thread.mappers;
 
 import com.techforum.backend.domain.tag.mappers.TagMapper;
 import com.techforum.backend.domain.thread.Thread;
-import com.techforum.backend.domain.thread.dtos.ThreadCreateDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadUpdateDTO;
+import com.techforum.backend.domain.thread.dtos.*;
 import org.mapstruct.*;
 
 @Mapper(
@@ -23,4 +21,9 @@ public interface ThreadMapper {
 
   @Mapping(target = "tags", ignore = true)
   void updateThreadFromDto(ThreadUpdateDTO dto, @MappingTarget Thread thread);
+
+  @Mapping(target = "cosineSimilarityScore", source = "similarityScore")
+  DuplicateThreadDTO toDuplicateDTO(Thread thread, double similarityScore);
+
+  DuplicateThreadDTO toDuplicateDTO(DuplicateThreadProjection duplicateThreadProjection);
 }
