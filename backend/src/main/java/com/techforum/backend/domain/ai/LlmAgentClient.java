@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -47,46 +46,29 @@ public class LlmAgentClient {
   }
 
   @Async
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void handleThreadCreated(ThreadCreatedEvent event) {
-    log.info("[DEBUG-AI] 1. Async event received for thread ID: {}", event.threadId());
+    System.out.println("=== AI ANSWER GENERATION STARTED for thread: " + event.threadId());
 
     try {
-      log.info("[DEBUG-AI] 2. Looking for AI User UUID: {}", AI_USER_ID);
-      User aiUser =
-          userRepository
-              .findById(AI_USER_ID)
+      User aiUser = userRepository.findById(AI_USER_ID)
               .orElseThrow(() -> new IllegalStateException("AI user not found in DB"));
-      log.info("[DEBUG-AI] -> Success: Found AI User: {}", aiUser.getUsername());
 
-      log.info("[DEBUG-AI] 3. Looking for Thread ID in DB: {}", event.threadId());
-      Thread thread =
-          threadRepository
-              .findById(event.threadId())
-              .orElseThrow(
-                  () -> new IllegalStateException("Thread not found in DB: " + event.threadId()));
-      log.info("[DEBUG-AI] -> Success: Found Thread: {}", thread.getTitle());
+      Thread thread = threadRepository.findById(event.threadId())
+              .orElseThrow(() -> new IllegalStateException("Thread not found: " + event.threadId()));
 
-      log.info("[DEBUG-AI] 4. Calling Spring AI ChatClient...");
-      String answer =
-          chatClient
-              .prompt()
+      String answer = chatClient.prompt()
               .system(SYSTEM_PROMPT)
-              .user(
-                  u ->
-                      u.text("Title: {title}\nQuestion: {content}")
-                          .param("title", event.title())
-                          .param("content", event.body()))
+              .user(u -> u.text("""
+                            Title: {title}
+                            Question: {content}
+                            """)
+                      .param("title", event.title())
+                      .param("content", event.body()))
               .call()
               .content();
-      log.info(
-          "[DEBUG-AI] -> Success: LLM responded with length: {}",
-          (answer != null ? answer.length() : 0));
 
-      log.info("[DEBUG-AI] 5. Building and saving Comment entity...");
-      Comment aiComment =
-          Comment.builder()
+      Comment aiComment = Comment.builder()
               .author(aiUser)
               .thread(thread)
               .parent(null)
@@ -95,12 +77,10 @@ public class LlmAgentClient {
               .replyCount(0)
               .build();
 
-      Comment savedComment = commentRepository.save(aiComment);
-      log.info("[DEBUG-AI] 6. !!! SUCCESS !!! Comment persisted with ID: {}", savedComment.getId());
+      commentRepository.save(aiComment);
 
     } catch (Exception e) {
-      // CRITICAL: Log the FULL stack trace to see the real cause
-      log.error("[DEBUG-AI] !!! CRASH DETECTED !!!", e);
+      log.error("Failed to generate AI answer for thread {}: {}", event.threadId(), e.getMessage());
     }
   }
 }
