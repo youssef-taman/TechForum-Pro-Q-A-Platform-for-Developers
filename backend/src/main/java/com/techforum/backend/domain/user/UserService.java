@@ -26,7 +26,7 @@ public class UserService {
   public void promoteUser(UUID id, RoleType role) {
     User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
 
-    if (user.getRole().ordinal() >= role.ordinal()) {
+    if (user.getRole().ordinal() <= role.ordinal()) {
       throw new IllegalStateException("Cannot promote to the same or a lower role.");
     }
 
