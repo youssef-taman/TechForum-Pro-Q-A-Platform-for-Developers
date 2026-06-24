@@ -43,11 +43,12 @@ spring:
           min-idle: 1
 
   ai:
-    google:
-      genai:
-        api-key: ${LLM_API_KEY}
-        chat:
-          model: gemini-2.0-flash
+    openai:
+      api-key: ${LLM_API_KEY}
+      base-url: https://api.groq.com/openai
+      chat:
+        options:
+          model: llama-3.3-70b-versatile
 
 server:
   servlet:

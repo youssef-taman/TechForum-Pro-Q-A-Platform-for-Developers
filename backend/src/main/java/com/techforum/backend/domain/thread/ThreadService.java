@@ -21,6 +21,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.*;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -38,6 +39,7 @@ public class ThreadService {
   private final TagRepository tagRepository;
   private final AiIntegrationService aiIntegrationService;
   private final RedisCacheRepository redisRepository;
+  private final ApplicationEventPublisher eventPublisher;
 
   private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
     double[] embeddingDouble =
@@ -170,7 +172,11 @@ public class ThreadService {
     }
 
     Set<Tag> managedTags = getOrCreateTags(threadCreateDTO.tags());
-    Thread thread = saveThread(thread0CreateDTO, author, managedTags, embedding);
+    Thread thread = saveThread(threadCreateDTO, author, managedTags, embedding);
+
+    eventPublisher.publishEvent(
+        new ThreadCreatedEvent(thread.getId(), thread.getTitle(), thread.getBody()));
+
     return threadMapper.toDTO(thread);
   }
 

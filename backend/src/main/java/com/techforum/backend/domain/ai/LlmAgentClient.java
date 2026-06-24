@@ -4,6 +4,7 @@ import com.techforum.backend.domain.comment.Comment;
 import com.techforum.backend.domain.comment.CommentRepository;
 import com.techforum.backend.domain.thread.Thread;
 import com.techforum.backend.domain.thread.ThreadRepository;
+import com.techforum.backend.domain.thread.dtos.ThreadCreatedEvent;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
 import jakarta.annotation.PostConstruct;
@@ -13,7 +14,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
 @RequiredArgsConstructor
@@ -43,35 +47,44 @@ public class LlmAgentClient {
   }
 
   @Async
-  @Transactional
-  public void generateAndSaveAnswer(UUID threadId, String title, String body) {
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+  public void handleThreadCreated(ThreadCreatedEvent event) {
+    log.info("[DEBUG-AI] 1. Async event received for thread ID: {}", event.threadId());
+
     try {
+      log.info("[DEBUG-AI] 2. Looking for AI User UUID: {}", AI_USER_ID);
       User aiUser =
           userRepository
               .findById(AI_USER_ID)
               .orElseThrow(() -> new IllegalStateException("AI user not found in DB"));
+      log.info("[DEBUG-AI] -> Success: Found AI User: {}", aiUser.getUsername());
 
+      log.info("[DEBUG-AI] 3. Looking for Thread ID in DB: {}", event.threadId());
       Thread thread =
           threadRepository
-              .findById(threadId)
-              .orElseThrow(() -> new IllegalStateException("Thread not found: " + threadId));
+              .findById(event.threadId())
+              .orElseThrow(
+                  () -> new IllegalStateException("Thread not found in DB: " + event.threadId()));
+      log.info("[DEBUG-AI] -> Success: Found Thread: {}", thread.getTitle());
 
+      log.info("[DEBUG-AI] 4. Calling Spring AI ChatClient...");
       String answer =
           chatClient
               .prompt()
               .system(SYSTEM_PROMPT)
               .user(
                   u ->
-                      u.text(
-                              """
-                                                      Title: {title}
-                                                      Question: {content}
-                                                      """)
-                          .param("title", title)
-                          .param("content", body))
+                      u.text("Title: {title}\nQuestion: {content}")
+                          .param("title", event.title())
+                          .param("content", event.body()))
               .call()
               .content();
+      log.info(
+          "[DEBUG-AI] -> Success: LLM responded with length: {}",
+          (answer != null ? answer.length() : 0));
 
+      log.info("[DEBUG-AI] 5. Building and saving Comment entity...");
       Comment aiComment =
           Comment.builder()
               .author(aiUser)
@@ -82,10 +95,12 @@ public class LlmAgentClient {
               .replyCount(0)
               .build();
 
-      commentRepository.save(aiComment);
+      Comment savedComment = commentRepository.save(aiComment);
+      log.info("[DEBUG-AI] 6. !!! SUCCESS !!! Comment persisted with ID: {}", savedComment.getId());
 
     } catch (Exception e) {
-      log.error("Failed to generate AI answer for thread {}: {}", threadId, e.getMessage());
+      // CRITICAL: Log the FULL stack trace to see the real cause
+      log.error("[DEBUG-AI] !!! CRASH DETECTED !!!", e);
     }
   }
 }

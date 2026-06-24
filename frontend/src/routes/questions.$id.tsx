@@ -164,7 +164,7 @@ function removeCommentFromTree(
 async function loadReplyTree(commentId: string): Promise<CommentNode[]> {
     const pageSize = 100;
     const firstPage = await apiFetch<Page<Comment>>(
-        `${API_ENDPOINTS.commentReplies(commentId)}?page=0&size=${pageSize}&sortBy=latest`,
+    `${API_ENDPOINTS.commentReplies(commentId)}?page=0&size=${pageSize}&sortBy=latest`,
     );
 
     const allReplies: Comment[] = [...firstPage.content];
@@ -192,7 +192,7 @@ async function loadCommentTree(
     const backendSort =
         sortBy === "oldest" ? "older" : sortBy === "top" ? "top score" : "latest";
     const data = await apiFetch<Page<Comment>>(
-        `${API_ENDPOINTS.threadComments(threadId)}?page=${page}&size=${pageSize}&sortBy=${backendSort}`,
+    `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=${backendSort}`,
     );
 
     const tree = data.content.map((comment) => ({

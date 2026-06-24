@@ -28,6 +28,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_EXPIRATION_TIME=${JWT_EXPIRATION_TIME}
       - AI_SERVICE_URL=http://ai-service:8000
+      - LLM_API_KEY=${LLM_API_KEY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/actuator/health"]
       interval: 10s
@@ -96,7 +97,6 @@ services:
       - ./ai-service:/workspaces/techforum-pro/ai-service:cached
       - ai_model_cache:/root/.cache/huggingface
     environment:
-      - LLM_API_KEY=${LLM_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
     ports:
       - "8000:8000"

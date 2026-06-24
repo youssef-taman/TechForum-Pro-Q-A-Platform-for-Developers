@@ -1,9 +1,6 @@
 package com.techforum.backend.domain.thread;
 
-import com.techforum.backend.domain.thread.dtos.ThreadCreateDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadSearchDTO;
-import com.techforum.backend.domain.thread.dtos.ThreadUpdateDTO;
+import com.techforum.backend.domain.thread.dtos.*;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +18,8 @@ public class ThreadController {
   private final ThreadService threadService;
 
   @PostMapping("/suggest-tags")
-  public String[] suggestTags(@RequestBody String title, @RequestBody String body) {
-    return threadService.suggestTags(title, body);
+  public ResponseEntity<String[]> suggestTags(@RequestBody SuggestTagsRequest request) {
+    return ResponseEntity.ok(threadService.suggestTags(request.title(), request.body()));
   }
 
   @PostMapping

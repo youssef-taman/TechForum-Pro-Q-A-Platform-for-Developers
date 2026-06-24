@@ -27,7 +27,7 @@ export const API_ENDPOINTS = {
     userThreads: (username: string) =>
         `${API_BASE_URL}/threads/user/${username}`,
     threadSearch: `${API_BASE_URL}/threads/search`,
-    threadTagRecommendations: `${API_BASE_URL}/threads/ai/tags`,
+    threadTagRecommendations: `${API_BASE_URL}/threads/suggest-tags`,
     threadDuplicateCheck: `${API_BASE_URL}/threads/ai/duplicates`,
 
     // Tags
@@ -35,7 +35,7 @@ export const API_ENDPOINTS = {
 
     // Comments
     commentsBase: `${API_BASE_URL}/comments`,
-    comments: (threadId: string) => `${API_BASE_URL}/threads/${threadId}/comments`,
+    comments: (threadId: string) => `${API_BASE_URL}/comments/${threadId}`,
     commentReplies: (commentId: string) =>
         `${API_BASE_URL}/comments/${commentId}/replies`,
     commentById: (commentId: string) => `${API_BASE_URL}/comments/${commentId}`,

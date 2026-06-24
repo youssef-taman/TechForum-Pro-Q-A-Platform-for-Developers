@@ -18,7 +18,7 @@ public class ThreadExceptionHandler {
       DuplicateThreadException exception) {
     Map<String, Object> body = new HashMap<>();
     body.put("message", exception.getMessage());
-    body.put("duplicate threads", exception.getDuplicateThreadDTOSet());
+    body.put("similarThreads", exception.getDuplicateThreadDTOSet());
 
     return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
   }

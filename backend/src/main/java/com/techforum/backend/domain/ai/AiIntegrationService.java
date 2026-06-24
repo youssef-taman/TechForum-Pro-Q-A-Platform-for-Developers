@@ -1,10 +1,12 @@
 package com.techforum.backend.domain.ai;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiIntegrationService {
@@ -27,16 +29,19 @@ public class AiIntegrationService {
   }
 
   public String[] getTags(String title, String body) {
-    String codeExtracted = extractCode(body);
-    String cleanBody = removeCode(body);
+    String safeTitle = (title != null) ? title : "";
+    String safeBody = (body != null) ? body : "";
 
-    var request = new TagRequest(title, cleanBody, codeExtracted);
+    String codeExtracted = extractCode(safeBody);
+    String cleanBody = removeCode(safeBody);
+    var request = new TagRequest(safeTitle, cleanBody, codeExtracted);
 
     try {
       var response =
           restTemplate.postForEntity(aiServiceUrl + "/api/v1/tags", request, TagResponse.class);
       return response.getBody() != null ? response.getBody().tags() : new String[0];
     } catch (Exception e) {
+      log.error("Failed to fetch tags from AI service at URL: {}", aiServiceUrl, e);
       return new String[0];
     }
   }

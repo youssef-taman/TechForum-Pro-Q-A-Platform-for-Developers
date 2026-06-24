@@ -1,5 +1,6 @@
 import torch
 import joblib
+import numpy as np
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from huggingface_hub import hf_hub_download
@@ -38,4 +39,13 @@ class ModelRegistry:
             filename="mlb.pkl",
             token=settings.HF_TOKEN
         )
+        
         cls.mlb = joblib.load(mlb_path)
+        
+        thresholds_path = hf_hub_download(
+            repo_id=settings.TAGGER_MODEL_ID,
+            filename="best_thresholds.npy",
+            token=settings.HF_TOKEN
+        )
+        
+        cls.thresholds = np.load(thresholds_path)
