@@ -1,12 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Eye, Loader2, Pencil, Plus, SearchX, Sparkles, X, Send } from "lucide-react";
+import { AlertTriangle, Eye, Loader2, Pencil, SearchX, Sparkles, X, Send } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import { apiFetch, API_ENDPOINTS } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/ask")({
   head: () => ({ meta: [{ title: "Ask a Question — TechForum Pro" }] }),
@@ -27,6 +26,7 @@ type DuplicateSuggestion = {
 function AskPage() {
   const navigate = useNavigate();
   const { isLoggedIn } = useAuth();
+  const [step, setStep] = useState<1 | 2>(1);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [tagInput, setTagInput] = useState("");
@@ -52,10 +52,18 @@ function AskPage() {
   };
   const removeTag = (t: string) => setTags(tags.filter((x) => x !== t));
 
-  const addSuggestedTag = (tag: string) => {
-    const normalized = tag.trim().toLowerCase();
-    if (!normalized || tags.includes(normalized)) return;
-    setTags((current) => [...current, normalized]);
+  const appendRecommendedTags = (recommendedTags: string[]) => {
+    if (recommendedTags.length === 0) return;
+    setTags((current) => {
+      const next = [...current];
+      for (const tag of recommendedTags) {
+        const normalized = tag.trim().toLowerCase();
+        if (normalized && !next.includes(normalized)) {
+          next.push(normalized);
+        }
+      }
+      return next;
+    });
   };
 
   const canAnalyze = title.trim().length >= 8 && body.trim().length >= BODY_MIN;
@@ -68,14 +76,18 @@ function AskPage() {
 
     setLoadingTags(true);
     try {
-      const suggestions = await apiFetch<string[]>(API_ENDPOINTS.threadTagRecommendations, {
+      const suggestions = (await apiFetch(API_ENDPOINTS.threadTagRecommendations, {
         method: "POST",
         body: JSON.stringify(previewPayload),
-      });
+      })) as string[];
 
-      setTagSuggestions(
-        Array.from(new Set((suggestions ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean))),
-      );
+      const normalizedSuggestions = Array.from(
+        new Set(
+          (suggestions ?? []).map((tag: string) => tag.trim().toLowerCase()).filter((tag): tag is string => Boolean(tag)),
+        ),
+      ) as string[];
+      setTagSuggestions(normalizedSuggestions);
+      appendRecommendedTags(normalizedSuggestions);
 
       toast.success("Tag recommendations ready.");
     } catch (err) {
@@ -105,6 +117,8 @@ function AskPage() {
       } else {
         toast.success("No close duplicates found.");
       }
+
+      setStep(2);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to check duplicates");
     } finally {
@@ -159,172 +173,217 @@ function AskPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_360px]">
-      <section className="rounded-xl border border-border bg-card p-6">
-        <h1 className="font-code text-2xl font-bold">
-          <span className="text-muted-foreground">~/</span>ask-question
-        </h1>
+    <div className="mx-auto max-w-6xl">
+      <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3 font-code text-xs">
+        <div>
+          <p className="text-muted-foreground">~/ask-question</p>
+          <p className="mt-1 text-foreground">
+            {step === 1 ? "Step 1 of 2 · Write Question" : "Step 2 of 2 · Review Duplicates"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className={`rounded-full border px-2 py-0.5 ${step === 1 ? "border-neon/40 text-neon" : "border-border"}`}>Write</span>
+          <span className="text-border">→</span>
+          <span className={`rounded-full border px-2 py-0.5 ${step === 2 ? "border-neon/40 text-neon" : "border-border"}`}>Review</span>
+        </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-6">
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="font-code text-xs text-muted-foreground">title</label>
-              <span className="font-code text-[11px] text-muted-foreground">{title.length}/{TITLE_MAX}</span>
-            </div>
-            <input type="text" value={title}
-              onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX))}
-              placeholder="How do I optimize a recursive function in TypeScript?"
-              className="w-full rounded-lg border border-input bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none" />
-            {!titleValid && title.length > 0 && (
-              <p className="mt-1 font-code text-[11px] text-destructive">Title must be at least 8 characters</p>
-            )}
-          </div>
+      <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-[1fr_360px]">
+        <section className="rounded-xl border border-border bg-card p-6">
+          {step === 1 ? (
+            <div className="space-y-6">
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="font-code text-xs text-muted-foreground">title</label>
+                  <span className="font-code text-[11px] text-muted-foreground">{title.length}/{TITLE_MAX}</span>
+                </div>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX))}
+                  placeholder="How do I optimize a recursive function in TypeScript?"
+                  className="w-full rounded-lg border border-input bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none"
+                />
+                {!titleValid && title.length > 0 && (
+                  <p className="mt-1 font-code text-[11px] text-destructive">Title must be at least 8 characters</p>
+                )}
+              </div>
 
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="font-code text-xs text-muted-foreground">body (markdown)</label>
-              <div className="flex items-center gap-2">
-                <span className="font-code text-[11px] text-muted-foreground">{body.length} chars</span>
-                <button type="button" onClick={() => setShowPreview((s) => !s)}
-                  className="flex items-center gap-1 rounded border border-border px-2 py-0.5 font-code text-[11px] text-muted-foreground hover:border-neon hover:text-neon">
-                  {showPreview ? <Pencil className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                  {showPreview ? "Edit" : "Preview"}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="font-code text-xs text-muted-foreground">body (markdown)</label>
+                  <div className="flex items-center gap-2">
+                    <span className="font-code text-[11px] text-muted-foreground">{body.length} chars</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowPreview((s) => !s)}
+                      className="flex items-center gap-1 rounded border border-border px-2 py-0.5 font-code text-[11px] text-muted-foreground hover:border-neon hover:text-neon"
+                    >
+                      {showPreview ? <Pencil className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      {showPreview ? "Edit" : "Preview"}
+                    </button>
+                  </div>
+                </div>
+                {showPreview ? (
+                  <div className="min-h-60 rounded-lg border border-border bg-background p-4">
+                    {body ? <Markdown content={body} /> : <p className="font-code text-xs text-muted-foreground">Nothing to preview yet…</p>}
+                  </div>
+                ) : (
+                  <textarea
+                    rows={12}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Describe your problem in detail. Use markdown for code blocks…"
+                    className="w-full resize-y rounded-lg border border-input bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none"
+                  />
+                )}
+                {!bodyValid && body.length > 0 && (
+                  <p className="mt-1 font-code text-[11px] text-destructive">Body must be at least {BODY_MIN} characters</p>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="font-code text-xs text-muted-foreground">tags</label>
+                  <button
+                    type="button"
+                    onClick={fetchTagRecommendations}
+                    disabled={loadingTags || !canAnalyze}
+                    className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 font-code text-[11px] text-muted-foreground hover:border-neon hover:text-neon disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loadingTags ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    {loadingTags ? "Loading..." : "Recommend Tags"}
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background p-2">
+                  {tags.map((t) => (
+                    <span key={t} className="flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 font-code text-[11px] text-neon">
+                      {t}
+                      <button type="button" onClick={() => removeTag(t)} className="hover:text-destructive">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addTag();
+                      }
+                    }}
+                    placeholder="add tag and press Enter…"
+                    className="min-w-35 flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none"
+                  />
+                </div>
+                {tagSuggestions.length > 0 && (
+                  <p className="mt-1 font-code text-[11px] text-muted-foreground">
+                    Recommended tags appended: {tagSuggestions.join(", ")}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                <span className="font-code text-[11px] text-muted-foreground">
+                  Fill the fields, then review duplicates before posting.
+                </span>
+                <button
+                  type="button"
+                  onClick={checkDuplicateThreads}
+                  disabled={!canAnalyze || loadingDuplicates}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {loadingDuplicates ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SearchX className="h-3.5 w-3.5" />}
+                  Next: Check Duplicates
                 </button>
               </div>
             </div>
-            {showPreview ? (
-              <div className="min-h-60 rounded-lg border border-border bg-background p-4">
-                {body ? <Markdown content={body} /> : <p className="font-code text-xs text-muted-foreground">Nothing to preview yet…</p>}
+          ) : (
+            <div className="space-y-5">
+              <div className="rounded-lg border border-border bg-background p-4 font-code text-sm text-muted-foreground">
+                <p className="text-[11px] uppercase tracking-wide">Reviewing</p>
+                <p className="mt-2 text-foreground">{title}</p>
+                <p className="mt-1 line-clamp-3 text-[11px] text-muted-foreground">{body}</p>
               </div>
-            ) : (
-              <textarea rows={12} value={body} onChange={(e) => setBody(e.target.value)}
-                placeholder="Describe your problem in detail. Use markdown for code blocks…"
-                className="w-full resize-y rounded-lg border border-input bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none" />
-            )}
-            {!bodyValid && body.length > 0 && (
-              <p className="mt-1 font-code text-[11px] text-destructive">Body must be at least {BODY_MIN} characters</p>
-            )}
-          </div>
 
-          <div>
-            <label className="mb-1.5 block font-code text-xs text-muted-foreground">tags</label>
-            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background p-2">
-              {tags.map((t) => (
-                <span key={t} className="flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 font-code text-[11px] text-neon">
-                  {t}
-                  <button type="button" onClick={() => removeTag(t)} className="hover:text-destructive"><X className="h-3 w-3" /></button>
-                </span>
-              ))}
-              <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } }}
-                placeholder="add tag and press Enter…"
-                className="min-w-35 flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none" />
-            </div>
-          </div>
+              {loadingDuplicates ? (
+                <div className="flex min-h-40 items-center justify-center rounded-lg border border-border bg-background">
+                  <div className="flex items-center gap-3 font-code text-xs text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin text-neon" />
+                    Checking for similar questions…
+                  </div>
+                </div>
+              ) : duplicateSuggestions.length === 0 ? (
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <p className="font-code text-sm text-foreground">No similar questions found.</p>
+                  <p className="mt-1 font-code text-[11px] text-muted-foreground">
+                    You can post your question now.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    <h3 className="font-code text-[11px] uppercase tracking-wide">Potential duplicates</h3>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {duplicateSuggestions.map((duplicate) => (
+                      <Link
+                        key={duplicate.threadId}
+                        to="/questions/$id"
+                        params={{id: duplicate.threadId}}
+                        className="block rounded-md border border-border bg-background/70 p-3 transition hover:border-neon/40 hover:bg-background"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-code text-sm font-medium text-foreground">{duplicate.title}</p>
+                            <p className="mt-1 font-code text-[11px] text-muted-foreground">
+                              by @{duplicate.authorUsername}
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-border px-2 py-0.5 font-code text-[10px] text-muted-foreground">
+                            {Math.round((duplicate.cosineSimilarityScore ?? 0) * 100)}%
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          <button type="submit" disabled={!canSubmit}
-            className="w-full rounded-lg bg-primary py-3 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
-            <span className="inline-flex items-center gap-2">
-              <Send className="h-3.5 w-3.5" />
-              {submitting ? "Posting…" : "Post Question"}
-            </span>
-          </button>
-        </form>
-      </section>
-
-      <aside className="space-y-4">
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h2 className="font-code text-sm font-semibold text-foreground">AI Assist</h2>
-          <p className="mt-1 font-code text-[11px] text-muted-foreground">
-            Generate tag ideas and scan for similar questions before you submit.
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={fetchTagRecommendations}
-              disabled={loadingTags || !canAnalyze}
-              className="justify-start"
-            >
-              {loadingTags ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {loadingTags ? "Loading tag ideas..." : "Recommend tags"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={checkDuplicateThreads}
-              disabled={loadingDuplicates || !canAnalyze}
-              className="justify-start"
-            >
-              {loadingDuplicates ? <Loader2 className="h-4 w-4 animate-spin" /> : <SearchX className="h-4 w-4" />}
-              {loadingDuplicates ? "Checking duplicates..." : "Check duplicates"}
-            </Button>
-          </div>
-
-          {tagSuggestions.length > 0 && (
-            <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="font-code text-[11px] uppercase tracking-wide text-muted-foreground">Suggested tags</h3>
-                <span className="font-code text-[11px] text-muted-foreground">Click to add</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {tagSuggestions.map((tag) => {
-                  const alreadySelected = tags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => addSuggestedTag(tag)}
-                      disabled={alreadySelected}
-                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 font-code text-[11px] transition ${
-                        alreadySelected
-                          ? "cursor-not-allowed border-border bg-muted text-muted-foreground"
-                          : "border-neon/30 bg-neon/10 text-neon hover:border-neon hover:bg-neon/15"
-                      }`}
-                    >
-                      <Plus className="h-3 w-3" />
-                      {tag}
-                    </button>
-                  );
-                })}
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="rounded-lg border border-border px-4 py-2 font-code text-sm text-muted-foreground hover:border-neon hover:text-neon"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={!canSubmit || loadingDuplicates}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Post Question
+                </button>
               </div>
             </div>
           )}
+        </section>
 
-          {duplicateSuggestions.length > 0 && (
-            <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="h-4 w-4" />
-                <h3 className="font-code text-[11px] uppercase tracking-wide">Potential duplicates</h3>
-              </div>
-              <div className="mt-3 space-y-2">
-                {duplicateSuggestions.map((duplicate) => (
-                  <Link
-                    key={duplicate.threadId}
-                    to="/questions/$id"
-                    params={{ id: duplicate.threadId }}
-                    className="block rounded-md border border-border bg-background/70 p-3 transition hover:border-neon/40 hover:bg-background"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-code text-sm font-medium text-foreground">{duplicate.title}</p>
-                        <p className="mt-1 font-code text-[11px] text-muted-foreground">
-                          by @{duplicate.authorUsername}
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-border px-2 py-0.5 font-code text-[10px] text-muted-foreground">
-                        {Math.round((duplicate.cosineSimilarityScore ?? 0) * 100)}%
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
+        <aside className="space-y-4">
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h3 className="font-code text-[11px] uppercase tracking-wide text-muted-foreground">Current state</h3>
+            <div className="mt-3 space-y-2 font-code text-[11px] text-muted-foreground">
+              <p>Title: {titleValid ? "ready" : "needs work"}</p>
+              <p>Body: {bodyValid ? "ready" : "needs work"}</p>
+              <p>Tags: {tags.length} selected</p>
             </div>
-          )}
-        </div>
-
-        {/* Preview box removed per design — inline preview toggle remains */}
-      </aside>
+          </div>
+        </aside>
+      </form>
     </div>
   );
 }
