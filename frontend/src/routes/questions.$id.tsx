@@ -25,7 +25,7 @@ import {Markdown} from "@/components/Markdown";
 import {decodeQuotedLiteral} from "@/lib/markdown";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import {useAuth} from "@/lib/auth-context";
-import type {Thread, Comment, Bookmark as BookmarkType, Page} from "@/types";
+import type {Thread, Comment, Bookmark as BookmarkType, Page, VoteType} from "@/types";
 import type {ThreadStatus} from "@/types";
 import {
     AlertDialog,
@@ -72,6 +72,55 @@ function relativeTime(iso: string) {
 }
 
 type CommentNode = Comment & {replies: CommentNode[]};
+
+const TECHFORUM_AI_USERNAME = "TechForum AI";
+
+function buildVoteMap(nodes: CommentNode[]): Record<string, VoteType> {
+    const votes: Record<string, VoteType> = {};
+
+    const visit = (currentNodes: CommentNode[]) => {
+        for (const node of currentNodes) {
+            if (node.userVote) {
+                votes[node.id] = node.userVote;
+            }
+            if (node.replies.length > 0) {
+                visit(node.replies);
+            }
+        }
+    };
+
+    visit(nodes);
+    return votes;
+}
+
+function extractAiComment(nodes: CommentNode[]): {
+    nodes: CommentNode[];
+    aiComment: CommentNode | null;
+} {
+    let aiComment: CommentNode | null = null;
+
+    const nextNodes = nodes.flatMap((node) => {
+        const nextRepliesResult = extractAiComment(node.replies);
+
+        if (!aiComment && node.authorName === TECHFORUM_AI_USERNAME) {
+            aiComment = {...node, replies: nextRepliesResult.nodes};
+            return [];
+        }
+
+        if (nextRepliesResult.aiComment && !aiComment) {
+            aiComment = nextRepliesResult.aiComment;
+        }
+
+        return [
+            {
+                ...node,
+                replies: nextRepliesResult.nodes,
+            },
+        ];
+    });
+
+    return {nodes: nextNodes, aiComment};
+}
 
 function updateCommentTree(
     nodes: CommentNode[],
@@ -143,7 +192,7 @@ async function loadCommentTree(
     const backendSort =
         sortBy === "oldest" ? "older" : sortBy === "top" ? "top score" : "latest";
     const data = await apiFetch<Page<Comment>>(
-        `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=${backendSort}`,
+        `${API_ENDPOINTS.threadComments(threadId)}?page=${page}&size=${pageSize}&sortBy=${backendSort}`,
     );
 
     const tree = data.content.map((comment) => ({
@@ -356,7 +405,7 @@ function CommentCard({
                         {aiComment && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-500">
                                 <Sparkles className="h-2.5 w-2.5" />
-                                AI
+                                TechForum AI
                             </span>
                         )}
                         <span className="text-muted-foreground/40">·</span>
@@ -531,6 +580,29 @@ function CommentCard({
     );
 }
 
+function AiCommentSkeleton() {
+    return (
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+                <div className="h-9 w-9 rounded-xl border border-cyan-500/20 bg-cyan-500/10" />
+                <div className="space-y-1">
+                    <div className="h-3 w-28 rounded-full bg-cyan-500/15" />
+                    <div className="h-2.5 w-20 rounded-full bg-cyan-500/10" />
+                </div>
+                <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 font-code text-[10px] font-semibold text-cyan-500">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    TechForum AI
+                </span>
+            </div>
+            <div className="space-y-2">
+                <div className="h-3 w-3/4 rounded-full bg-cyan-500/10" />
+                <div className="h-3 w-5/6 rounded-full bg-cyan-500/10" />
+                <div className="h-3 w-2/3 rounded-full bg-cyan-500/10" />
+            </div>
+        </div>
+    );
+}
+
 /* ─── Main page ─── */
 function QuestionDetail() {
     const {id} = Route.useParams();
@@ -547,6 +619,9 @@ function QuestionDetail() {
     const [totalCommentPages, setTotalCommentPages] = useState(1);
     const [loadingThread, setLoadingThread] = useState(true);
     const [loadingComments, setLoadingComments] = useState(false);
+    const [pollingForAiComment, setPollingForAiComment] = useState(false);
+    const [pollingTimedOut, setPollingTimedOut] = useState(false);
+    const [aiComment, setAiComment] = useState<CommentNode | null>(null);
     const [bookmarked, setBookmarked] = useState(false);
     const [newComment, setNewComment] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -594,7 +669,7 @@ function QuestionDetail() {
         !!user &&
         (comment.authorName === user.username || isPrivileged);
     const isAiComment = (comment: Comment) =>
-        /(^ai$|\bai\b|assistant|bot|llm|gpt)/i.test(comment.authorName);
+        comment.authorName === TECHFORUM_AI_USERNAME;
 
     const toggleReplies = async (comment: CommentNode) => {
         const nextExpanded = !(expandedReplies[comment.id] ?? false);
@@ -613,6 +688,7 @@ function QuestionDetail() {
         setLoadingReplies((current) => ({...current, [comment.id]: true}));
         try {
             const replies = await loadReplyTree(comment.id);
+            const replyVotes = buildVoteMap(replies);
                 // compute total descendant reply count (include nested replies)
                 const countDescendants = (nodes: CommentNode[]): number => {
                     let total = 0;
@@ -631,6 +707,7 @@ function QuestionDetail() {
                         totalReplies: totalReplies,
                     })),
                 );
+            setVotedComments((current) => ({...current, ...replyVotes}));
         } catch {
             toast.error("Failed to load replies");
         } finally {
@@ -778,18 +855,78 @@ function QuestionDetail() {
         }
     };
 
-    const reloadComments = useCallback(async () => {
-        setLoadingComments(true);
+    const reloadComments = useCallback(async (options?: {silent?: boolean}) => {
+        const silent = options?.silent ?? false;
+        if (!silent) setLoadingComments(true);
         try {
             const data = await loadCommentTree(id, commentsPage, commentSort);
-            setComments(data.tree);
+            const {nodes, aiComment: nextAiComment} = extractAiComment(data.tree);
+            setComments(nodes);
+            setAiComment(nextAiComment);
+            setVotedComments(buildVoteMap(data.tree));
             setTotalCommentPages(data.totalPages);
+            return !!nextAiComment;
         } catch {
-            toast.error("Failed to load comments");
+            if (!silent) toast.error("Failed to load comments");
+            return false;
         } finally {
-            setLoadingComments(false);
+            if (!silent) setLoadingComments(false);
         }
     }, [id, commentsPage, commentSort]);
+
+    useEffect(() => {
+        let cancelled = false;
+        let pollingInterval: ReturnType<typeof window.setInterval> | null = null;
+        let timeoutId: ReturnType<typeof window.setTimeout> | null = null;
+        let pollInFlight = false;
+
+        const stopPolling = () => {
+            if (pollingInterval !== null) {
+                window.clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            if (timeoutId !== null) {
+                window.clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+        };
+
+        const startPolling = async () => {
+            setAiComment(null);
+            setPollingTimedOut(false);
+            setPollingForAiComment(false);
+
+            const foundAiOnFirstLoad = await reloadComments();
+            if (cancelled || foundAiOnFirstLoad) return;
+
+            setPollingForAiComment(true);
+
+            pollingInterval = window.setInterval(async () => {
+                if (cancelled) return;
+                if (pollInFlight) return;
+                pollInFlight = true;
+                const foundAi = await reloadComments({silent: true});
+                pollInFlight = false;
+                if (cancelled || !foundAi) return;
+                setPollingForAiComment(false);
+                stopPolling();
+            }, 3000);
+
+            timeoutId = window.setTimeout(() => {
+                if (cancelled) return;
+                setPollingForAiComment(false);
+                setPollingTimedOut(true);
+                stopPolling();
+            }, 60000);
+        };
+
+        void startPolling();
+
+        return () => {
+            cancelled = true;
+            stopPolling();
+        };
+    }, [id, commentsPage, commentSort, reloadComments]);
 
     useEffect(() => {
         const load = async () => {
@@ -861,10 +998,6 @@ function QuestionDetail() {
             cancelled = true;
         };
     }, [id, isLoggedIn]);
-
-    useEffect(() => {
-        void reloadComments();
-    }, [reloadComments]);
 
     const handleBookmark = async () => {
         if (!isLoggedIn) {
@@ -981,8 +1114,8 @@ function QuestionDetail() {
     };
 
     const handleVote = async (
-        commentId: string,
-        type: "UPVOTE" | "DOWNVOTE",
+    commentId: string,
+    type: "UPVOTE" | "DOWNVOTE",
     ) => {
         if (!isLoggedIn) {
             toast.error("Please log in to vote");
@@ -997,76 +1130,82 @@ function QuestionDetail() {
         }
 
         const prev = votedComments[commentId] ?? null;
-        setVotingComments((current) => ({...current, [commentId]: true}));
+        setVotingComments((current) => ({ ...current, [commentId]: true }));
 
         if (prev === type) {
+            const revertDelta = type === "UPVOTE" ? -1 : 1;
+
+            // Optimistic UI Update
             setVotedComments((current) => {
-                const c = {...current};
+                const c = { ...current };
                 delete c[commentId];
                 return c;
             });
             setComments((current) =>
                 updateCommentTree(current, commentId, (c) => ({
                     ...c,
-                    score: c.score - (type === "UPVOTE" ? 1 : -1),
-                })),
+                    score: c.score + revertDelta,
+                }))
             );
+
             try {
                 await apiFetch(API_ENDPOINTS.voteComment(commentId), {
                     method: "POST",
-                    body: JSON.stringify({type}),
+                    body: JSON.stringify({ type }),
                 });
             } catch (err) {
-                setVotedComments((current) => ({
-                    ...current,
-                    [commentId]: prev,
-                }));
+                setVotedComments((current) => ({ ...current, [commentId]: prev }));
                 setComments((current) =>
                     updateCommentTree(current, commentId, (c) => ({
                         ...c,
-                        score: c.score + (type === "UPVOTE" ? 1 : -1),
-                    })),
+                        score: c.score - revertDelta,
+                    }))
                 );
                 toast.error(err instanceof Error ? err.message : "Vote failed");
             } finally {
-                setVotingComments((current) => ({
-                    ...current,
-                    [commentId]: false,
-                }));
+                setVotingComments((current) => ({ ...current, [commentId]: false }));
             }
             return;
         }
 
-        setVotedComments((current) => ({...current, [commentId]: type}));
+        const oldContribution = prev === "UPVOTE" ? 1 : prev === "DOWNVOTE" ? -1 : 0;
+        const newContribution = type === "UPVOTE" ? 1 : -1;
+        const delta = newContribution - oldContribution;
+
+        setVotedComments((current) => ({ ...current, [commentId]: type }));
         setComments((current) =>
-            updateCommentTree(current, commentId, (c) => {
-                const prevDelta = prev ? (prev === "UPVOTE" ? 1 : -1) : 0;
-                const nextDelta = type === "UPVOTE" ? 1 : -1;
-                return {...c, score: c.score - prevDelta + nextDelta};
-            }),
+            updateCommentTree(current, commentId, (c) => ({
+                ...c,
+                score: c.score + delta,
+            }))
         );
 
         try {
             await apiFetch(API_ENDPOINTS.voteComment(commentId), {
                 method: "POST",
-                body: JSON.stringify({type}),
+                body: JSON.stringify({ type }),
             });
         } catch (err) {
-            setVotedComments((current) => ({
-                ...current,
-                [commentId]:
-                    prev ?? (undefined as unknown as "UPVOTE" | "DOWNVOTE"),
-            }));
+            // Rollback
+            if (prev === null) {
+                setVotedComments((current) => {
+                    const c = { ...current };
+                    delete c[commentId];
+                    return c;
+                });
+            } else {
+                setVotedComments((current) => ({ ...current, [commentId]: prev }));
+            }
+            
             setComments((current) =>
-                updateCommentTree(current, commentId, (c) => {
-                    const rollback = type === "UPVOTE" ? -1 : 1;
-                    const restore = prev ? (prev === "UPVOTE" ? 1 : -1) : 0;
-                    return {...c, score: c.score + rollback + restore};
-                }),
+                updateCommentTree(current, commentId, (c) => ({
+                    ...c,
+                    score: c.score - delta,
+                }))
             );
             toast.error(err instanceof Error ? err.message : "Vote failed");
         } finally {
-            setVotingComments((current) => ({...current, [commentId]: false}));
+            setVotingComments((current) => ({ ...current, [commentId]: false }));
         }
     };
 
@@ -1096,6 +1235,8 @@ function QuestionDetail() {
         canDeleteComment,
         isAiComment,
     };
+
+    const showAiSkeleton = pollingForAiComment && !aiComment && !pollingTimedOut;
 
     if (loadingThread) {
         return (
@@ -1412,6 +1553,23 @@ function QuestionDetail() {
                         </div>
                     ) : (
                         <div className="space-y-4">
+                            {aiComment ? (
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 font-code text-[10px] uppercase tracking-[0.2em] text-cyan-500">
+                                        <Sparkles className="h-3 w-3" />
+                                        TechForum AI answer
+                                    </div>
+                                    <CommentCard
+                                        key={aiComment.id}
+                                        comment={aiComment}
+                                        depth={0}
+                                        handlers={commentHandlers}
+                                    />
+                                </div>
+                            ) : showAiSkeleton ? (
+                                <AiCommentSkeleton />
+                            ) : null}
+
                             {comments.map((comment) => (
                                 <CommentCard
                                     key={comment.id}

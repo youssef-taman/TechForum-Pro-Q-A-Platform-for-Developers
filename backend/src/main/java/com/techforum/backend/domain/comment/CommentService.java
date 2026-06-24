@@ -6,13 +6,19 @@ import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.comment.dtos.AddCommentDTO;
 import com.techforum.backend.domain.comment.dtos.CommentDTO;
 import com.techforum.backend.domain.comment.mappers.CommentMapper;
+import com.techforum.backend.domain.interaction.Vote;
+import com.techforum.backend.domain.interaction.VoteRepository;
+import com.techforum.backend.domain.interaction.enums.VoteType;
 import com.techforum.backend.domain.thread.Thread;
 import com.techforum.backend.domain.thread.ThreadRepository;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
 import jakarta.validation.Valid;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -31,6 +37,7 @@ public class CommentService {
   private final UserRepository userRepository;
   private final ThreadRepository threadRepository;
   private final CommentMapper commentMapper;
+  private final VoteRepository voteRepository;
 
   @Transactional
   public CommentDTO addComment(@Valid AddCommentDTO addCommentDTO, Authentication authentication) {
@@ -70,7 +77,7 @@ public class CommentService {
             .createdAt(Instant.now())
             .build();
     commentRepository.save(comment);
-    return commentMapper.toDTO(comment);
+    return commentMapper.toDTO(comment, null);
   }
 
   @Transactional
@@ -127,11 +134,18 @@ public class CommentService {
     comment.setContent(updatedContent);
     commentRepository.save(comment);
 
-    return commentMapper.toDTO(comment);
+    VoteType userVote =
+        voteRepository
+            .findByVoter_IdAndComment_Id(user.getId(), commentId)
+            .map(Vote::getType)
+            .orElse(null);
+
+    return commentMapper.toDTO(comment, userVote);
   }
 
   @Transactional(readOnly = true)
-  public Page<CommentDTO> getThreadComments(UUID threadId, int page, int size, String sortBy) {
+  public Page<CommentDTO> getThreadComments(
+      UUID threadId, int page, int size, String sortBy, Authentication authentication) {
 
     Thread thread =
         threadRepository
@@ -149,12 +163,15 @@ public class CommentService {
     Pageable pageable = PageRequest.of(page, size, sort);
     Page<Comment> commentPage =
         commentRepository.findByThread_IdAndParentIsNull(threadId, pageable);
-    return commentPage.map(commentMapper::toDTO);
+
+    UUID userId = resolveUserId(authentication);
+    Map<UUID, VoteType> voteMap = buildVoteMap(userId, commentPage.getContent());
+    return commentPage.map(c -> commentMapper.toDTO(c, voteMap.get(c.getId())));
   }
 
   @Transactional(readOnly = true)
-  public Page<CommentDTO> getCommentReplies(UUID commentId, int page, int size, String sortBy) {
-
+  public Page<CommentDTO> getCommentReplies(
+      UUID commentId, int page, int size, String sortBy, Authentication authentication) {
     Comment comment =
         commentRepository.findById(commentId).orElseThrow(CommentNotFoundException::new);
 
@@ -168,6 +185,21 @@ public class CommentService {
 
     Pageable pageable = PageRequest.of(page, size, sort);
     Page<Comment> commentPage = commentRepository.getAllByParent_Id(commentId, pageable);
-    return commentPage.map(commentMapper::toDTO);
+
+    UUID userId = resolveUserId(authentication);
+    Map<UUID, VoteType> voteMap = buildVoteMap(userId, commentPage.getContent());
+    return commentPage.map(c -> commentMapper.toDTO(c, voteMap.get(c.getId())));
+  }
+
+  private Map<UUID, VoteType> buildVoteMap(UUID userId, List<Comment> comments) {
+    if (userId == null || comments.isEmpty()) return Map.of();
+    List<UUID> commentIds = comments.stream().map(Comment::getId).toList();
+    return voteRepository.findAllByVoterIdAndCommentIdIn(userId, commentIds).stream()
+        .collect(Collectors.toMap(v -> v.getComment().getId(), Vote::getType));
+  }
+
+  private UUID resolveUserId(Authentication authentication) {
+    if (authentication == null || !authentication.isAuthenticated()) return null;
+    return userRepository.findByIdentifier(authentication.getName()).map(User::getId).orElse(null);
   }
 }

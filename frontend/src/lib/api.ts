@@ -35,7 +35,7 @@ export const API_ENDPOINTS = {
 
     // Comments
     commentsBase: `${API_BASE_URL}/comments`,
-    comments: (threadId: string) => `${API_BASE_URL}/comments/${threadId}`,
+    comments: (threadId: string) => `${API_BASE_URL}/threads/${threadId}/comments`,
     commentReplies: (commentId: string) =>
         `${API_BASE_URL}/comments/${commentId}/replies`,
     commentById: (commentId: string) => `${API_BASE_URL}/comments/${commentId}`,

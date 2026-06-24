@@ -44,6 +44,7 @@ export interface Comment {
     totalReplies?: number;
     score: number;
     createdAt: string;
+    userVote?: VoteType | null;
 }
 
 export interface Bookmark {
