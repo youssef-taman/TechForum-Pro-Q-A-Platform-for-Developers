@@ -532,7 +532,7 @@ function AskPage() {
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {reviewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SearchX className="h-3.5 w-3.5" />}
-                  Next: Check Duplicates
+                  Check Duplicates
                 </button>
               </div>
             ) : (

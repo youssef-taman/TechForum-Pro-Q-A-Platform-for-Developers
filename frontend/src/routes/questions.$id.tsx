@@ -73,7 +73,7 @@ function relativeTime(iso: string) {
 
 type CommentNode = Comment & {replies: CommentNode[]};
 
-const TECHFORUM_AI_USERNAME = "TechForum AI";
+const TECHFORUM_AI_USERNAME = "TechForumAI";
 
 function buildVoteMap(nodes: CommentNode[]): Record<string, VoteType> {
     const votes: Record<string, VoteType> = {};
@@ -482,7 +482,7 @@ function CommentCard({
                             </div>
                         </div>
                     ) : (
-                        <div className={`mt-1.5 ${contentClass}`}>
+                        <div className={`mt-1.5 max-w-prose ${contentClass}`}>
                             <Markdown
                                 content={comment.content}
                                 compact={depth > 0}
@@ -1113,10 +1113,20 @@ function QuestionDetail() {
         }
     };
 
+   
+
     const handleVote = async (
-    commentId: string,
-    type: "UPVOTE" | "DOWNVOTE",
+        commentId: string,
+        type: "UPVOTE" | "DOWNVOTE",
     ) => {
+        const updateAiCommentScore = (delta: number) => {
+            setAiComment((current: CommentNode | null) =>
+                current && current.id === commentId
+                    ? {...current, score: current.score + delta}
+                    : current,
+            );
+        };
+
         if (!isLoggedIn) {
             toast.error("Please log in to vote");
             return;
@@ -1135,7 +1145,6 @@ function QuestionDetail() {
         if (prev === type) {
             const revertDelta = type === "UPVOTE" ? -1 : 1;
 
-            // Optimistic UI Update
             setVotedComments((current) => {
                 const c = { ...current };
                 delete c[commentId];
@@ -1147,6 +1156,7 @@ function QuestionDetail() {
                     score: c.score + revertDelta,
                 }))
             );
+            updateAiCommentScore(revertDelta);
 
             try {
                 await apiFetch(API_ENDPOINTS.voteComment(commentId), {
@@ -1161,6 +1171,7 @@ function QuestionDetail() {
                         score: c.score - revertDelta,
                     }))
                 );
+                updateAiCommentScore(-revertDelta);
                 toast.error(err instanceof Error ? err.message : "Vote failed");
             } finally {
                 setVotingComments((current) => ({ ...current, [commentId]: false }));
@@ -1179,6 +1190,7 @@ function QuestionDetail() {
                 score: c.score + delta,
             }))
         );
+        updateAiCommentScore(delta);
 
         try {
             await apiFetch(API_ENDPOINTS.voteComment(commentId), {
@@ -1186,7 +1198,6 @@ function QuestionDetail() {
                 body: JSON.stringify({ type }),
             });
         } catch (err) {
-            // Rollback
             if (prev === null) {
                 setVotedComments((current) => {
                     const c = { ...current };
@@ -1196,13 +1207,13 @@ function QuestionDetail() {
             } else {
                 setVotedComments((current) => ({ ...current, [commentId]: prev }));
             }
-            
             setComments((current) =>
                 updateCommentTree(current, commentId, (c) => ({
                     ...c,
                     score: c.score - delta,
                 }))
             );
+            updateAiCommentScore(-delta);
             toast.error(err instanceof Error ? err.message : "Vote failed");
         } finally {
             setVotingComments((current) => ({ ...current, [commentId]: false }));
