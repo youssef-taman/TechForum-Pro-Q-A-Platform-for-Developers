@@ -57,5 +57,5 @@ server:
 application:
   security:
     jwt:
-      secret-key: f62ee1d6eaa7d0fc352f6ac8b6cb8523d7967120a7b73bd16ea67ce2ced683ecf2b83ad079ad64b818b117299e45b481732557238040888a40de0008bb473b22
-      expiration-time: 86400000
+      secret-key: ${JWT_SECRET_KEY}
+      expiration-time: ${JWT_EXPIRATION_TIME}
