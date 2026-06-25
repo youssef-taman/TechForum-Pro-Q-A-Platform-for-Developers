@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -26,11 +28,11 @@ public class LlmAgentClient {
 
   private static final String SYSTEM_PROMPT =
       """
-          You are TechForum AI, an expert software engineering assistant.
-          Your job is to answer developer questions clearly and concisely.
-          Format your response in plain text. No markdown.
-          Be direct and technical. If you don't know, say so.
-          """;
+                  You are TechForum AI, an expert software engineering assistant.
+                  Your job is to answer developer questions clearly and concisely.
+                  Format your response in plain text. No markdown.
+                  Be direct and technical. If you don't know, say so.
+                  """;
 
   private final ChatClient.Builder chatClientBuilder;
   private final CommentRepository commentRepository;
@@ -45,10 +47,9 @@ public class LlmAgentClient {
   }
 
   @Async
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void handleThreadCreated(ThreadCreatedEvent event) {
-    System.out.println("=== AI ANSWER GENERATION STARTED for thread: " + event.threadId());
-
     try {
       User aiUser =
           userRepository
@@ -59,7 +60,7 @@ public class LlmAgentClient {
           threadRepository
               .findById(event.threadId())
               .orElseThrow(
-                  () -> new IllegalStateException("Thread not found: " + event.threadId()));
+                  () -> new IllegalStateException("Thread not found in DB: " + event.threadId()));
 
       String answer =
           chatClient
@@ -67,11 +68,7 @@ public class LlmAgentClient {
               .system(SYSTEM_PROMPT)
               .user(
                   u ->
-                      u.text(
-                              """
-                            Title: {title}
-                            Question: {content}
-                            """)
+                      u.text("Title: {title}\nQuestion: {content}")
                           .param("title", event.title())
                           .param("content", event.body()))
               .call()
@@ -90,7 +87,7 @@ public class LlmAgentClient {
       commentRepository.save(aiComment);
 
     } catch (Exception e) {
-      log.error("Failed to generate AI answer for thread {}: {}", event.threadId(), e.getMessage());
+      log.error("Failed to generate AI comment for thread: {}", event.threadId(), e);
     }
   }
 }
