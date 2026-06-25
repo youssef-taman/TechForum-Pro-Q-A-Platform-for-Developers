@@ -2,6 +2,7 @@ package com.techforum.backend.domain.thread;
 
 import com.techforum.backend.domain.thread.dtos.*;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -17,9 +18,18 @@ public class ThreadController {
 
   private final ThreadService threadService;
 
-  @PostMapping("/suggest-tags")
+  @PostMapping("/suggestTags")
   public ResponseEntity<String[]> suggestTags(@RequestBody SuggestTagsRequest request) {
     return ResponseEntity.ok(threadService.suggestTags(request.title(), request.body()));
+  }
+
+  @PostMapping("/checkDuplicates")
+  public ResponseEntity<List<DuplicateThreadDTO>> CheckDuplicates(
+      @Valid @RequestBody ThreadCreateDTO threadCreateDTO, Authentication authentication) {
+
+    List<DuplicateThreadDTO> duplicates =
+        threadService.CheckDuplicates(threadCreateDTO, authentication);
+    return ResponseEntity.status(HttpStatus.CREATED).body(duplicates);
   }
 
   @PostMapping

@@ -16,6 +16,7 @@ import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.thread.mappers.ThreadMapper;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
+import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ThreadService {
 
-  public static final double MATCHING_THRESHOLD = 0.95;
+  public static final double MATCHING_THRESHOLD = 0.65;
   private final ThreadRepository threadRepository;
   private final UserRepository userRepository;
   private final ThreadMapper threadMapper;
@@ -154,6 +155,20 @@ public class ThreadService {
     return managedTags;
   }
 
+  public List<DuplicateThreadDTO> CheckDuplicates(
+      @Valid ThreadCreateDTO threadCreateDTO, Authentication authentication) {
+
+    String currentUserIdentifier = authentication.getName();
+    userRepository
+        .findByIdentifier(currentUserIdentifier)
+        .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
+
+    float[] embedding = getThreadEmbedding(threadCreateDTO);
+
+    //      checkDuplicationInTrendingThreads(embedding, 3);
+    return searchDuplicateThreadsInArchive(embedding, MATCHING_THRESHOLD, 3);
+  }
+
   @Transactional
   public ThreadDTO createThread(
       ThreadCreateDTO threadCreateDTO, boolean ignoreDuplicates, Authentication authentication) {
@@ -165,11 +180,6 @@ public class ThreadService {
             .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
 
     float[] embedding = getThreadEmbedding(threadCreateDTO);
-
-    if (!ignoreDuplicates) {
-      //      checkDuplicationInTrendingThreads(embedding, 3);
-      checkDuplicateInThreadArchive(embedding, 3);
-    }
 
     Set<Tag> managedTags = getOrCreateTags(threadCreateDTO.tags());
     Thread thread = saveThread(threadCreateDTO, author, managedTags, embedding);

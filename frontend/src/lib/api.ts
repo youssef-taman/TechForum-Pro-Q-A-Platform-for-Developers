@@ -27,8 +27,8 @@ export const API_ENDPOINTS = {
     userThreads: (username: string) =>
         `${API_BASE_URL}/threads/user/${username}`,
     threadSearch: `${API_BASE_URL}/threads/search`,
-    threadTagRecommendations: `${API_BASE_URL}/threads/suggest-tags`,
-    threadDuplicateCheck: `${API_BASE_URL}/threads/ai/duplicates`,
+    threadTagRecommendations: `${API_BASE_URL}/threads/suggestTags`,
+    threadDuplicateCheck: `${API_BASE_URL}/threads/checkDuplicates`,
 
     // Tags
     tags: `${API_BASE_URL}/tags`,

@@ -159,10 +159,9 @@ function normalizeDuplicateSuggestions(payload: unknown): DuplicateSuggestion[] 
 }
 
 async function postThread(
-  ignoreDuplicates: boolean,
   payload: { title: string; body: string; tags: { name: string }[] },
 ): Promise<ThreadRequestResult> {
-  const response = await fetchWithAuth(`${API_ENDPOINTS.threads}?ignoreDuplicates=${ignoreDuplicates ? "true" : "false"}`, {
+  const response = await fetchWithAuth(`${API_ENDPOINTS.threads}`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -188,7 +187,6 @@ function AskPage() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
   const threadPayload = {
     title: title.trim(),
     body: body.trim(),
@@ -261,79 +259,68 @@ function AskPage() {
   };
 
   const checkDuplicateThreads = async () => {
-    if (!canAnalyze || reviewLoading) {
-      if (!canAnalyze) {
-        toast.error("Add a title and body before checking duplicates.");
-      }
-      return;
+  if (!canAnalyze || reviewLoading) {
+    if (!canAnalyze) {
+      toast.error("Add a title and body before checking duplicates.");
+    }
+    return;
+  }
+
+  setReviewLoading(true);
+  setDuplicateConflict(false);
+  setDuplicateSuggestions([]);
+
+  try {
+    const [threadResult, suggestionsResult] = await Promise.allSettled([
+      apiFetch(API_ENDPOINTS.threadDuplicateCheck, {
+        method: "POST",
+        body: JSON.stringify({ title: title.trim(), body: body.trim() }),
+      }),
+      apiFetch<string[]>(API_ENDPOINTS.threadTagRecommendations, {
+        method: "POST",
+        body: JSON.stringify({ title: title.trim(), body: body.trim() }),
+      }),
+    ]);
+
+    if (suggestionsResult.status === "fulfilled") {
+      const rawSuggestions = suggestionsResult.value as string[];
+      const normalizedSuggestions: string[] = Array.from(
+        new Set(rawSuggestions.map((tag: string) => normalizeTag(tag)).filter((tag: string) => Boolean(tag))),
+      );
+
+      setTagSuggestions(normalizedSuggestions);
+      appendRecommendedTags(normalizedSuggestions);
+    } else {
+      toast.error(
+        suggestionsResult.reason instanceof Error
+          ? suggestionsResult.reason.message
+          : "Failed to load tag suggestions",
+      );
     }
 
-    setReviewLoading(true);
-    setDuplicateConflict(false);
-    setDuplicateSuggestions([]);
-
-    try {
-      const [threadResult, suggestionsResult] = await Promise.allSettled([
-        postThread(false, threadPayload),
-        apiFetch<string[]>(`${API_BASE_URL}/threads/suggest-tags`, {
-          method: "POST",
-          body: JSON.stringify({ title: title.trim(), body: body.trim() }),
-        }),
-      ]);
-
-      if (suggestionsResult.status === "fulfilled") {
-        const rawSuggestions = suggestionsResult.value as string[];
-        const normalizedSuggestions: string[] = Array.from(
-          new Set(rawSuggestions.map((tag: string) => normalizeTag(tag)).filter((tag: string) => Boolean(tag))),
-        );
-
-        setTagSuggestions(normalizedSuggestions);
-        appendRecommendedTags(normalizedSuggestions);
-      } else {
-        toast.error(
-          suggestionsResult.reason instanceof Error
-            ? suggestionsResult.reason.message
-            : "Failed to load tag suggestions",
-        );
-      }
-
-      if (threadResult.status === "rejected") {
-        throw threadResult.reason;
-      }
-
-      if (threadResult.value.status === 201) {
-        const threadId = resolveThreadId(threadResult.value.payload);
-        if (!threadId) {
-          throw new Error("Question was created, but the response did not include a thread id.");
-        }
-
-        toast.success("Question posted!");
-        navigate({ to: "/questions/$id", params: { id: threadId } });
-        return;
-      }
-
-      if (threadResult.value.status === 409) {
-        const conflicts = normalizeDuplicateSuggestions(threadResult.value.payload);
-        setDuplicateConflict(true);
-        setDuplicateSuggestions(conflicts);
-
-        if (conflicts.length > 0) {
-          toast.warning("Potential duplicates found. Review them before posting.");
-        } else {
-          toast.warning("Potential duplicates found.");
-        }
-
-        setStep(2);
-        return;
-      }
-
-      throw new Error(`Unexpected response status: ${threadResult.value.status}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to check duplicates");
-    } finally {
-      setReviewLoading(false);
+    if (threadResult.status === "rejected") {
+      throw threadResult.reason;
     }
-  };
+
+    // لقط الدوبلكيتس اللي راجعة من الأيند بوينت الجديدة
+    const conflicts = normalizeDuplicateSuggestions(threadResult.value);
+    setDuplicateSuggestions(conflicts);
+    setDuplicateConflict(true); // تفعل زرار الـ Post في الخطوة التانية دايماً
+
+    if (conflicts.length > 0) {
+      toast.warning("Potential duplicates found. Review them before posting.");
+    } else {
+      toast.success("No duplicates found! Ready to post.");
+    }
+
+    setStep(2); // انقل اليوزر لصفحة المراجعة والزرار الجديد
+    return;
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to check duplicates");
+  } finally {
+    setReviewLoading(false);
+  }
+};
 
   const handleStepOneSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -347,7 +334,7 @@ function AskPage() {
 
     setSubmitting(true);
     try {
-      const result = await postThread(true, threadPayload);
+      const result = await postThread(threadPayload);
       if (result.status !== 201) {
         throw new Error(`Unexpected response status: ${result.status}`);
       }
@@ -553,7 +540,7 @@ function AskPage() {
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                    Post Anyway
+                    Post Question
                   </button>
                 ) : (
                   <span className="font-code text-[11px] text-muted-foreground">Posting is only enabled after a duplicate conflict.</span>
@@ -603,14 +590,14 @@ function AskPage() {
                     </Link>
                   ))}
                 </div>
-              ) : (
-                <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 font-code text-xs text-amber-700 dark:text-amber-300">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>Potential duplicates were returned, but no thread list came back.</span>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/10 p-4 font-code text-xs text-green-700 dark:text-green-300">
+                    <div className="flex items-center gap-2">
+                      {/* <span className="text-sm">✅</span> */}
+                      <span>No duplicates found! You can safely post your question.</span>
+                    </div>
                   </div>
-                </div>
-              )
+                )
             ) : (
               <div className="mt-3 rounded-lg border border-border bg-background p-4 font-code text-xs text-muted-foreground">
                 {duplicateConflict

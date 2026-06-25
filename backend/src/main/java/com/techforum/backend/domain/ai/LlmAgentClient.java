@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -51,24 +50,35 @@ public class LlmAgentClient {
     System.out.println("=== AI ANSWER GENERATION STARTED for thread: " + event.threadId());
 
     try {
-      User aiUser = userRepository.findById(AI_USER_ID)
+      User aiUser =
+          userRepository
+              .findById(AI_USER_ID)
               .orElseThrow(() -> new IllegalStateException("AI user not found in DB"));
 
-      Thread thread = threadRepository.findById(event.threadId())
-              .orElseThrow(() -> new IllegalStateException("Thread not found: " + event.threadId()));
+      Thread thread =
+          threadRepository
+              .findById(event.threadId())
+              .orElseThrow(
+                  () -> new IllegalStateException("Thread not found: " + event.threadId()));
 
-      String answer = chatClient.prompt()
+      String answer =
+          chatClient
+              .prompt()
               .system(SYSTEM_PROMPT)
-              .user(u -> u.text("""
+              .user(
+                  u ->
+                      u.text(
+                              """
                             Title: {title}
                             Question: {content}
                             """)
-                      .param("title", event.title())
-                      .param("content", event.body()))
+                          .param("title", event.title())
+                          .param("content", event.body()))
               .call()
               .content();
 
-      Comment aiComment = Comment.builder()
+      Comment aiComment =
+          Comment.builder()
               .author(aiUser)
               .thread(thread)
               .parent(null)
