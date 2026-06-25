@@ -42,6 +42,13 @@ spring:
           max-idle: 5
           min-idle: 1
 
+  ai:
+    google:
+      genai:
+        api-key: ${LLM_API_KEY}
+        chat:
+          model: gemini-2.0-flash
+
 server:
   servlet:
     context-path: /api

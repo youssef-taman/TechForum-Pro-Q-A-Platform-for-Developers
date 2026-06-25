@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -72,10 +73,16 @@ public class SecurityConfig {
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/auth/login", "/auth/register")
+                auth.requestMatchers("/auth/**")
                     .permitAll()
-                    .requestMatchers("/auth/logout")
-                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/threads/**")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/comments/**")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/tags/**")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/users/{username}")
+                    .permitAll()
                     .requestMatchers(ACTUATOR_WHITELIST)
                     .permitAll()
                     .requestMatchers(SWAGGER_WHITELIST)

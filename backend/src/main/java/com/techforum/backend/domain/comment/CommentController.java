@@ -23,9 +23,10 @@ public class CommentController {
       @PathVariable UUID threadId,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
-      @RequestParam(defaultValue = "latest", required = false) String sortBy) {
+      @RequestParam(defaultValue = "latest", required = false) String sortBy,
+      Authentication authentication) {
     Page<CommentDTO> commentDTOPage =
-        commentService.getThreadComments(threadId, page, size, sortBy);
+        commentService.getThreadComments(threadId, page, size, sortBy, authentication);
     return ResponseEntity.ok(commentDTOPage);
   }
 
@@ -34,9 +35,10 @@ public class CommentController {
       @PathVariable UUID commentId,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
-      @RequestParam(defaultValue = "latest", required = false) String sortBy) {
+      @RequestParam(defaultValue = "latest", required = false) String sortBy,
+      Authentication authentication) {
     Page<CommentDTO> commentDTOPage =
-        commentService.getCommentReplies(commentId, page, size, sortBy);
+        commentService.getCommentReplies(commentId, page, size, sortBy, authentication);
     return ResponseEntity.ok(commentDTOPage);
   }
 
