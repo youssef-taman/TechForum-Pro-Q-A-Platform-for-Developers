@@ -172,17 +172,32 @@ async function postThread(
   };
 }
 
+const DRAFT_KEY = "techforum-ask-draft";
+
+function getSavedDraft() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { 
+    return null; 
+  }
+}
+
 function AskPage() {
   const navigate = useNavigate();
   const { isLoggedIn } = useAuth();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+
+  const initialDraft = getSavedDraft();
+
+  const [step, setStep] = useState<1 | 2>(initialDraft?.step ?? 1);
+  const [title, setTitle] = useState(initialDraft?.title ?? "");
+  const [body, setBody] = useState(initialDraft?.body ?? "");
   const [tagInput, setTagInput] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
-  const [duplicateSuggestions, setDuplicateSuggestions] = useState<DuplicateSuggestion[]>([]);
-  const [duplicateConflict, setDuplicateConflict] = useState(false);
+  const [tags, setTags] = useState<string[]>(initialDraft?.tags ?? []);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>(initialDraft?.tagSuggestions ?? []);
+  const [duplicateSuggestions, setDuplicateSuggestions] = useState<DuplicateSuggestion[]>(initialDraft?.duplicateSuggestions ?? []);
+  const [duplicateConflict, setDuplicateConflict] = useState(initialDraft?.duplicateConflict ?? false);
   const [loadingTags, setLoadingTags] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -302,10 +317,10 @@ function AskPage() {
       throw threadResult.reason;
     }
 
-    // لقط الدوبلكيتس اللي راجعة من الأيند بوينت الجديدة
+  
     const conflicts = normalizeDuplicateSuggestions(threadResult.value);
     setDuplicateSuggestions(conflicts);
-    setDuplicateConflict(true); // تفعل زرار الـ Post في الخطوة التانية دايماً
+    setDuplicateConflict(true);
 
     if (conflicts.length > 0) {
       toast.warning("Potential duplicates found. Review them before posting.");
@@ -313,7 +328,7 @@ function AskPage() {
       toast.success("No duplicates found! Ready to post.");
     }
 
-    setStep(2); // انقل اليوزر لصفحة المراجعة والزرار الجديد
+    setStep(2); 
     return;
   } catch (err) {
     toast.error(err instanceof Error ? err.message : "Failed to check duplicates");
@@ -344,7 +359,9 @@ function AskPage() {
         throw new Error("Question was created, but the response did not include a thread id.");
       }
 
+      localStorage.removeItem(DRAFT_KEY);
       toast.success("Question posted!");
+      
       navigate({ to: "/questions/$id", params: { id: threadId } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to post question");
@@ -358,6 +375,20 @@ function AskPage() {
     setDuplicateSuggestions([]);
     setDuplicateConflict(false);
   }, [title, body]);
+
+  useEffect(() => {
+    if (title.trim() || body.trim() || tags.length > 0) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        step,
+        title: title.trim(),
+        body: body.trim(),
+        tags,
+        tagSuggestions,
+        duplicateSuggestions,
+        duplicateConflict,
+      }));
+    }
+  }, [step, title, body, tags, tagSuggestions, duplicateSuggestions, duplicateConflict]);
 
   if (!isLoggedIn) {
     return (
