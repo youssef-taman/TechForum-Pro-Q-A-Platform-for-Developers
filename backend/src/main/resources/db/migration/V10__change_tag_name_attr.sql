@@ -1,0 +1,1 @@
+ALTER TABLE techforum.tags RENAME COLUMN tag_name TO name;
