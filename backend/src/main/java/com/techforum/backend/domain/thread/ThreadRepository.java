@@ -2,6 +2,7 @@ package com.techforum.backend.domain.thread;
 
 import com.querydsl.core.types.Predicate;
 import com.techforum.backend.domain.thread.dtos.DuplicateThreadProjection;
+import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -92,4 +93,6 @@ public interface ThreadRepository
           """,
       nativeQuery = true)
   void deleteThreadEmbeddingByThreadId(@Param("threadId") UUID threadId);
+
+  long countByStatus(ThreadStatus status);
 }

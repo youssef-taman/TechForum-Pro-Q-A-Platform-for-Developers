@@ -155,7 +155,13 @@ public class ThreadService {
     return managedTags;
   }
 
-  public List<DuplicateThreadDTO> CheckDuplicates(
+  public ThreadDTO getThreadById(UUID threadId) {
+    Thread thread =
+        threadRepository.findById(threadId).orElseThrow(() -> new ThreadNotFoundException());
+    return threadMapper.toDTO(thread);
+  }
+
+  public List<DuplicateThreadDTO> checkDuplicates(
       @Valid ThreadCreateDTO threadCreateDTO, Authentication authentication) {
 
     String currentUserIdentifier = authentication.getName();

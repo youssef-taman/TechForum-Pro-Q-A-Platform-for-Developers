@@ -1,13 +1,28 @@
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useState } from "react";
-import { AlertTriangle, Eye, Loader2, Pencil, SearchX, Send, Sparkles, X } from "lucide-react";
-import { toast } from "sonner";
-import { Markdown } from "../components/Markdown";
-import { API_BASE_URL, API_ENDPOINTS, apiFetch, clearAuth, getToken } from "../lib/api";
-import { useAuth } from "../lib/auth-context";
+import {Link, createFileRoute, useNavigate} from "@tanstack/react-router";
+import {type FormEvent, useEffect, useState} from "react";
+import {
+  AlertTriangle,
+  Eye,
+  Loader2,
+  Pencil,
+  SearchX,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react";
+import {toast} from "sonner";
+import {Markdown} from "../components/Markdown";
+import {
+  API_BASE_URL,
+  API_ENDPOINTS,
+  apiFetch,
+  clearAuth,
+  getToken,
+} from "../lib/api";
+import {useAuth} from "../lib/auth-context";
 
 export const Route = createFileRoute("/ask" as never)({
-  head: () => ({ meta: [{ title: "Ask a Question — TechForum Pro" }] }),
+  head: () => ({meta: [{title: "Ask a Question — TechForum Pro"}]}),
   component: AskPage,
 });
 
@@ -53,7 +68,7 @@ function getRequestHeaders() {
 
   return {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(token ? {Authorization: `Bearer ${token}`} : {}),
   };
 }
 
@@ -68,7 +83,10 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
   if (response.status === 401 || response.status === 403) {
     clearAuth();
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    if (
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/login")
+    ) {
       window.location.href = "/login";
     }
   }
@@ -99,15 +117,17 @@ async function parseResponseBody(response: Response) {
   }
 }
 
-function normalizeDuplicateSuggestions(payload: unknown): DuplicateSuggestion[] {
+function normalizeDuplicateSuggestions(
+  payload: unknown,
+): DuplicateSuggestion[] {
   const rawList = Array.isArray(payload)
     ? payload
     : payload && typeof payload === "object"
-      ? (payload as Record<string, unknown>).similarThreads ??
+      ? ((payload as Record<string, unknown>).similarThreads ??
         (payload as Record<string, unknown>).duplicates ??
         (payload as Record<string, unknown>).matches ??
         (payload as Record<string, unknown>).threads ??
-        []
+        [])
       : [];
 
   if (!Array.isArray(rawList)) {
@@ -122,9 +142,18 @@ function normalizeDuplicateSuggestions(payload: unknown): DuplicateSuggestion[] 
 
       const candidate = item as Record<string, unknown>;
       const threadId = candidate.threadId ?? candidate.id ?? candidate.threadID;
-      const title = candidate.title ?? candidate.threadTitle ?? candidate.subject ?? candidate.name;
+      const title =
+        candidate.title ??
+        candidate.threadTitle ??
+        candidate.subject ??
+        candidate.name;
 
-      if (typeof threadId !== "string" || !threadId.trim() || typeof title !== "string" || !title.trim()) {
+      if (
+        typeof threadId !== "string" ||
+        !threadId.trim() ||
+        typeof title !== "string" ||
+        !title.trim()
+      ) {
         return null;
       }
 
@@ -132,7 +161,9 @@ function normalizeDuplicateSuggestions(payload: unknown): DuplicateSuggestion[] 
       const authorUsername =
         typeof candidate.authorUsername === "string"
           ? candidate.authorUsername
-          : author && typeof author === "object" && typeof (author as Record<string, unknown>).username === "string"
+          : author &&
+              typeof author === "object" &&
+              typeof (author as Record<string, unknown>).username === "string"
             ? String((author as Record<string, unknown>).username)
             : typeof candidate.username === "string"
               ? candidate.username
@@ -145,7 +176,8 @@ function normalizeDuplicateSuggestions(payload: unknown): DuplicateSuggestion[] 
             ? candidate.score
             : 0;
 
-      const createdAt = typeof candidate.createdAt === "string" ? candidate.createdAt : "";
+      const createdAt =
+        typeof candidate.createdAt === "string" ? candidate.createdAt : "";
 
       return {
         threadId: threadId.trim(),
@@ -158,13 +190,32 @@ function normalizeDuplicateSuggestions(payload: unknown): DuplicateSuggestion[] 
     .filter((item): item is DuplicateSuggestion => Boolean(item));
 }
 
+// async function postThread(
+//   payload: { title: string; body: string; tags: { name: string }[] },
+// ): Promise<ThreadRequestResult> {
+//   const response = await fetchWithAuth(`${API_ENDPOINTS.threads}`, {
+//     method: "POST",
+//     body: JSON.stringify(payload),
+//   });
+
+//   return {
+//     status: response.status,
+//     payload: await parseResponseBody(response),
+//   };
+// }
+
 async function postThread(
-  payload: { title: string; body: string; tags: { name: string }[] },
+  payload: {title: string; body: string; tags: {name: string}[]},
+  ignoreDuplicates: boolean = false,
 ): Promise<ThreadRequestResult> {
-  const response = await fetchWithAuth(`${API_ENDPOINTS.threads}`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const queryParams = ignoreDuplicates ? "?ignoreDuplicates=true" : "";
+  const response = await fetchWithAuth(
+    `${API_ENDPOINTS.threads}${queryParams}`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 
   return {
     status: response.status,
@@ -179,14 +230,14 @@ function getSavedDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch { 
-    return null; 
+  } catch {
+    return null;
   }
 }
 
 function AskPage() {
   const navigate = useNavigate();
-  const { isLoggedIn } = useAuth();
+  const {isLoggedIn} = useAuth();
 
   const initialDraft = getSavedDraft();
 
@@ -195,9 +246,15 @@ function AskPage() {
   const [body, setBody] = useState(initialDraft?.body ?? "");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>(initialDraft?.tags ?? []);
-  const [tagSuggestions, setTagSuggestions] = useState<string[]>(initialDraft?.tagSuggestions ?? []);
-  const [duplicateSuggestions, setDuplicateSuggestions] = useState<DuplicateSuggestion[]>(initialDraft?.duplicateSuggestions ?? []);
-  const [duplicateConflict, setDuplicateConflict] = useState(initialDraft?.duplicateConflict ?? false);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>(
+    initialDraft?.tagSuggestions ?? [],
+  );
+  const [duplicateSuggestions, setDuplicateSuggestions] = useState<
+    DuplicateSuggestion[]
+  >(initialDraft?.duplicateSuggestions ?? []);
+  const [duplicateConflict, setDuplicateConflict] = useState(
+    initialDraft?.duplicateConflict ?? false,
+  );
   const [loadingTags, setLoadingTags] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -205,10 +262,11 @@ function AskPage() {
   const threadPayload = {
     title: title.trim(),
     body: body.trim(),
-    tags: tags.map((name) => ({ name })),
+    tags: tags.map((name) => ({name})),
   };
 
-  const titleValid = title.trim().length >= 8 && title.trim().length <= TITLE_MAX;
+  const titleValid =
+    title.trim().length >= 8 && title.trim().length <= TITLE_MAX;
   const bodyValid = body.trim().length >= BODY_MIN;
   const canAnalyze = titleValid && bodyValid;
   const canPostAnyway = duplicateConflict && !reviewLoading && !submitting;
@@ -248,94 +306,114 @@ function AskPage() {
 
   const fetchTagRecommendations = async () => {
     if (!canAnalyze) {
-      toast.error("Add a title and body before requesting tag recommendations.");
+      toast.error(
+        "Add a title and body before requesting tag recommendations.",
+      );
       return;
     }
 
     setLoadingTags(true);
     try {
-      const suggestions = (await apiFetch(API_ENDPOINTS.threadTagRecommendations, {
-        method: "POST",
-        body: JSON.stringify({ title: title.trim(), body: body.trim() }),
-      })) as string[];
+      const suggestions = (await apiFetch(
+        API_ENDPOINTS.threadTagRecommendations,
+        {
+          method: "POST",
+          body: JSON.stringify({title: title.trim(), body: body.trim()}),
+        },
+      )) as string[];
 
       const normalizedSuggestions = Array.from(
-        new Set((suggestions ?? []).map((tag: string) => normalizeTag(tag)).filter((tag): tag is string => Boolean(tag))),
+        new Set(
+          (suggestions ?? [])
+            .map((tag: string) => normalizeTag(tag))
+            .filter((tag): tag is string => Boolean(tag)),
+        ),
       );
 
       setTagSuggestions(normalizedSuggestions);
       appendRecommendedTags(normalizedSuggestions);
       toast.success("Tag recommendations ready.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load tag recommendations");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to load tag recommendations",
+      );
     } finally {
       setLoadingTags(false);
     }
   };
 
   const checkDuplicateThreads = async () => {
-  if (!canAnalyze || reviewLoading) {
-    if (!canAnalyze) {
-      toast.error("Add a title and body before checking duplicates.");
+    if (!canAnalyze || reviewLoading) {
+      if (!canAnalyze) {
+        toast.error("Add a title and body before checking duplicates.");
+      }
+      return;
     }
-    return;
-  }
 
-  setReviewLoading(true);
-  setDuplicateConflict(false);
-  setDuplicateSuggestions([]);
+    setReviewLoading(true);
+    setDuplicateConflict(false);
+    setDuplicateSuggestions([]);
 
-  try {
-    const [threadResult, suggestionsResult] = await Promise.allSettled([
-      apiFetch(API_ENDPOINTS.threadDuplicateCheck, {
-        method: "POST",
-        body: JSON.stringify({ title: title.trim(), body: body.trim() }),
-      }),
-      apiFetch<string[]>(API_ENDPOINTS.threadTagRecommendations, {
-        method: "POST",
-        body: JSON.stringify({ title: title.trim(), body: body.trim() }),
-      }),
-    ]);
+    try {
+      const [threadResult, suggestionsResult] = await Promise.allSettled([
+        apiFetch(API_ENDPOINTS.threadDuplicateCheck, {
+          method: "POST",
+          body: JSON.stringify({title: title.trim(), body: body.trim()}),
+        }),
+        apiFetch<string[]>(API_ENDPOINTS.threadTagRecommendations, {
+          method: "POST",
+          body: JSON.stringify({title: title.trim(), body: body.trim()}),
+        }),
+      ]);
 
-    if (suggestionsResult.status === "fulfilled") {
-      const rawSuggestions = suggestionsResult.value as string[];
-      const normalizedSuggestions: string[] = Array.from(
-        new Set(rawSuggestions.map((tag: string) => normalizeTag(tag)).filter((tag: string) => Boolean(tag))),
-      );
+      if (suggestionsResult.status === "fulfilled") {
+        const rawSuggestions = suggestionsResult.value as string[];
+        const normalizedSuggestions: string[] = Array.from(
+          new Set(
+            rawSuggestions
+              .map((tag: string) => normalizeTag(tag))
+              .filter((tag: string) => Boolean(tag)),
+          ),
+        );
 
-      setTagSuggestions(normalizedSuggestions);
-      appendRecommendedTags(normalizedSuggestions);
-    } else {
+        setTagSuggestions(normalizedSuggestions);
+        appendRecommendedTags(normalizedSuggestions);
+      } else {
+        toast.error(
+          suggestionsResult.reason instanceof Error
+            ? suggestionsResult.reason.message
+            : "Failed to load tag suggestions",
+        );
+      }
+
+      if (threadResult.status === "rejected") {
+        throw threadResult.reason;
+      }
+
+      const conflicts = normalizeDuplicateSuggestions(threadResult.value);
+      setDuplicateSuggestions(conflicts);
+      setDuplicateConflict(true);
+
+      if (conflicts.length > 0) {
+        toast.warning(
+          "Potential duplicates found. Review them before posting.",
+        );
+      } else {
+        toast.success("No duplicates found! Ready to post.");
+      }
+
+      setStep(2);
+      return;
+    } catch (err) {
       toast.error(
-        suggestionsResult.reason instanceof Error
-          ? suggestionsResult.reason.message
-          : "Failed to load tag suggestions",
+        err instanceof Error ? err.message : "Failed to check duplicates",
       );
+    } finally {
+      setReviewLoading(false);
     }
-
-    if (threadResult.status === "rejected") {
-      throw threadResult.reason;
-    }
-
-  
-    const conflicts = normalizeDuplicateSuggestions(threadResult.value);
-    setDuplicateSuggestions(conflicts);
-    setDuplicateConflict(true);
-
-    if (conflicts.length > 0) {
-      toast.warning("Potential duplicates found. Review them before posting.");
-    } else {
-      toast.success("No duplicates found! Ready to post.");
-    }
-
-    setStep(2); 
-    return;
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : "Failed to check duplicates");
-  } finally {
-    setReviewLoading(false);
-  }
-};
+  };
 
   const handleStepOneSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -349,22 +427,27 @@ function AskPage() {
 
     setSubmitting(true);
     try {
-      const result = await postThread(threadPayload);
+      // const result = await postThread(threadPayload);
+      const result = await postThread(threadPayload, true);
       if (result.status !== 201) {
         throw new Error(`Unexpected response status: ${result.status}`);
       }
 
       const threadId = resolveThreadId(result.payload);
       if (!threadId) {
-        throw new Error("Question was created, but the response did not include a thread id.");
+        throw new Error(
+          "Question was created, but the response did not include a thread id.",
+        );
       }
 
       localStorage.removeItem(DRAFT_KEY);
       toast.success("Question posted!");
-      
-      navigate({ to: "/questions/$id", params: { id: threadId } });
+
+      navigate({to: "/questions/$id", params: {id: threadId}});
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to post question");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to post question",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -378,23 +461,38 @@ function AskPage() {
 
   useEffect(() => {
     if (title.trim() || body.trim() || tags.length > 0) {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        step,
-        title: title.trim(),
-        body: body.trim(),
-        tags,
-        tagSuggestions,
-        duplicateSuggestions,
-        duplicateConflict,
-      }));
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({
+          step,
+          title: title.trim(),
+          body: body.trim(),
+          tags,
+          tagSuggestions,
+          duplicateSuggestions,
+          duplicateConflict,
+        }),
+      );
     }
-  }, [step, title, body, tags, tagSuggestions, duplicateSuggestions, duplicateConflict]);
+  }, [
+    step,
+    title,
+    body,
+    tags,
+    tagSuggestions,
+    duplicateSuggestions,
+    duplicateConflict,
+  ]);
 
   if (!isLoggedIn) {
     return (
       <div className="mx-auto max-w-md py-20 text-center">
         <p className="font-code text-sm text-muted-foreground">
-          You must <Link to="/login" className="text-neon hover:underline">log in</Link> to ask a question.
+          You must{" "}
+          <Link to="/login" className="text-neon hover:underline">
+            log in
+          </Link>{" "}
+          to ask a question.
         </p>
       </div>
     );
@@ -407,24 +505,39 @@ function AskPage() {
           <div>
             <p className="text-muted-foreground">~/ask-question</p>
             <p className="mt-1 text-foreground">
-              {step === 1 ? "Step 1 of 2 · Write Question" : "Step 2 of 2 · Review Duplicates"}
+              {step === 1
+                ? "Step 1 of 2 · Write Question"
+                : "Step 2 of 2 · Review Duplicates"}
             </p>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
-            <span className={`rounded-full border px-2 py-0.5 ${step === 1 ? "border-neon/40 text-neon" : "border-border"}`}>Write</span>
+            <span
+              className={`rounded-full border px-2 py-0.5 ${step === 1 ? "border-neon/40 text-neon" : "border-border"}`}
+            >
+              Write
+            </span>
             <span className="text-border">→</span>
-            <span className={`rounded-full border px-2 py-0.5 ${step === 2 ? "border-neon/40 text-neon" : "border-border"}`}>Review</span>
+            <span
+              className={`rounded-full border px-2 py-0.5 ${step === 2 ? "border-neon/40 text-neon" : "border-border"}`}
+            >
+              Review
+            </span>
           </div>
         </div>
       </div>
 
-      <form onSubmit={handleStepOneSubmit} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <form
+        onSubmit={handleStepOneSubmit}
+        className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]"
+      >
         <section className="rounded-xl border border-border bg-card p-6">
           <div className="space-y-6">
             <div className="rounded-lg border border-border bg-background/60 px-4 py-3 font-code text-[11px] text-muted-foreground">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="uppercase tracking-wide text-muted-foreground">composer</p>
+                  <p className="uppercase tracking-wide text-muted-foreground">
+                    composer
+                  </p>
                   <p className="mt-1 text-foreground">
                     {step === 1
                       ? "Write the question before duplicate review."
@@ -440,8 +553,12 @@ function AskPage() {
 
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <label className="font-code text-xs text-muted-foreground">title</label>
-                <span className="font-code text-[11px] text-muted-foreground">{title.length}/{TITLE_MAX}</span>
+                <label className="font-code text-xs text-muted-foreground">
+                  title
+                </label>
+                <span className="font-code text-[11px] text-muted-foreground">
+                  {title.length}/{TITLE_MAX}
+                </span>
               </div>
               <input
                 type="text"
@@ -451,28 +568,44 @@ function AskPage() {
                 className="w-full rounded-lg border border-input bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none"
               />
               {!titleValid && title.length > 0 && (
-                <p className="mt-1 font-code text-[11px] text-destructive">Title must be at least 8 characters</p>
+                <p className="mt-1 font-code text-[11px] text-destructive">
+                  Title must be at least 8 characters
+                </p>
               )}
             </div>
 
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <label className="font-code text-xs text-muted-foreground">body (markdown)</label>
+                <label className="font-code text-xs text-muted-foreground">
+                  body (markdown)
+                </label>
                 <div className="flex items-center gap-2">
-                  <span className="font-code text-[11px] text-muted-foreground">{body.length} chars</span>
+                  <span className="font-code text-[11px] text-muted-foreground">
+                    {body.length} chars
+                  </span>
                   <button
                     type="button"
                     onClick={() => setShowPreview((current) => !current)}
                     className="flex items-center gap-1 rounded border border-border px-2 py-0.5 font-code text-[11px] text-muted-foreground hover:border-neon hover:text-neon"
                   >
-                    {showPreview ? <Pencil className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    {showPreview ? (
+                      <Pencil className="h-3 w-3" />
+                    ) : (
+                      <Eye className="h-3 w-3" />
+                    )}
                     {showPreview ? "Edit" : "Preview"}
                   </button>
                 </div>
               </div>
               {showPreview ? (
                 <div className="min-h-60 rounded-lg border border-border bg-background p-4">
-                  {body ? <Markdown content={body} /> : <p className="font-code text-xs text-muted-foreground">Nothing to preview yet…</p>}
+                  {body ? (
+                    <Markdown content={body} />
+                  ) : (
+                    <p className="font-code text-xs text-muted-foreground">
+                      Nothing to preview yet…
+                    </p>
+                  )}
                 </div>
               ) : (
                 <textarea
@@ -484,20 +617,28 @@ function AskPage() {
                 />
               )}
               {!bodyValid && body.length > 0 && (
-                <p className="mt-1 font-code text-[11px] text-destructive">Body must be at least {BODY_MIN} characters</p>
+                <p className="mt-1 font-code text-[11px] text-destructive">
+                  Body must be at least {BODY_MIN} characters
+                </p>
               )}
             </div>
 
             <div>
               <div className="mb-1.5 flex items-center justify-between gap-3">
-                <label className="font-code text-xs text-muted-foreground">tags</label>
+                <label className="font-code text-xs text-muted-foreground">
+                  tags
+                </label>
                 <button
                   type="button"
                   onClick={fetchTagRecommendations}
                   disabled={loadingTags || !canAnalyze}
                   className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 font-code text-[11px] text-muted-foreground hover:border-neon hover:text-neon disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loadingTags ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  {loadingTags ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
                   {loadingTags ? "Loading..." : "Recommend Tags"}
                 </button>
               </div>
@@ -505,7 +646,10 @@ function AskPage() {
               <div className="rounded-lg border border-input bg-background p-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {tags.map((tag) => (
-                    <span key={tag} className="flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 font-code text-[11px] text-neon">
+                    <span
+                      key={tag}
+                      className="flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 font-code text-[11px] text-neon"
+                    >
                       {tag}
                       <button
                         type="button"
@@ -549,7 +693,11 @@ function AskPage() {
                   disabled={!canAnalyze || reviewLoading}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {reviewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SearchX className="h-3.5 w-3.5" />}
+                  {reviewLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <SearchX className="h-3.5 w-3.5" />
+                  )}
                   Check Duplicates
                 </button>
               </div>
@@ -570,11 +718,17 @@ function AskPage() {
                     disabled={!canPostAnyway}
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    {submitting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
                     Post Question
                   </button>
                 ) : (
-                  <span className="font-code text-[11px] text-muted-foreground">Posting is only enabled after a duplicate conflict.</span>
+                  <span className="font-code text-[11px] text-muted-foreground">
+                    Posting is only enabled after a duplicate conflict.
+                  </span>
                 )}
               </div>
             )}
@@ -583,17 +737,28 @@ function AskPage() {
 
         <aside className="space-y-4">
           <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="font-code text-[11px] uppercase tracking-wide text-muted-foreground">Current state</h3>
+            <h3 className="font-code text-[11px] uppercase tracking-wide text-muted-foreground">
+              Current state
+            </h3>
             <div className="mt-3 space-y-2 font-code text-[11px] text-muted-foreground">
               <p>Title: {titleValid ? "ready" : "needs work"}</p>
               <p>Body: {bodyValid ? "ready" : "needs work"}</p>
               <p>Tags: {tags.length} selected</p>
-              <p>Mode: {step === 1 ? "writing" : duplicateConflict ? "reviewing duplicates" : "review"}</p>
+              <p>
+                Mode:{" "}
+                {step === 1
+                  ? "writing"
+                  : duplicateConflict
+                    ? "reviewing duplicates"
+                    : "review"}
+              </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="font-code text-[11px] uppercase tracking-wide text-muted-foreground">Review panel</h3>
+            <h3 className="font-code text-[11px] uppercase tracking-wide text-muted-foreground">
+              Review panel
+            </h3>
             {reviewLoading ? (
               <div className="mt-3 flex items-center gap-3 rounded-lg border border-border bg-background p-4 font-code text-xs text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin text-neon" />
@@ -606,29 +771,38 @@ function AskPage() {
                     <Link
                       key={duplicate.threadId}
                       to="/questions/$id"
-                      params={{ id: duplicate.threadId }}
+                      params={{id: duplicate.threadId}}
                       className="block rounded-lg border border-border bg-background p-3 transition hover:border-neon/40 hover:bg-background/80"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-code text-sm font-medium text-foreground">{duplicate.title}</p>
-                          <p className="mt-1 font-code text-[11px] text-muted-foreground">by @{duplicate.authorUsername}</p>
+                          <p className="font-code text-sm font-medium text-foreground">
+                            {duplicate.title}
+                          </p>
+                          <p className="mt-1 font-code text-[11px] text-muted-foreground">
+                            by @{duplicate.authorUsername}
+                          </p>
                         </div>
                         <span className="rounded-full border border-border px-2 py-0.5 font-code text-[10px] text-muted-foreground">
-                          {Math.round((duplicate.cosineSimilarityScore ?? 0) * 100)}%
+                          {Math.round(
+                            (duplicate.cosineSimilarityScore ?? 0) * 100,
+                          )}
+                          %
                         </span>
                       </div>
                     </Link>
                   ))}
                 </div>
-                ) : (
-                  <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/10 p-4 font-code text-xs text-green-700 dark:text-green-300">
-                    <div className="flex items-center gap-2">
-                      {/* <span className="text-sm">✅</span> */}
-                      <span>No duplicates found! You can safely post your question.</span>
-                    </div>
+              ) : (
+                <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/10 p-4 font-code text-xs text-green-700 dark:text-green-300">
+                  <div className="flex items-center gap-2">
+                    {/* <span className="text-sm">✅</span> */}
+                    <span>
+                      No duplicates found! You can safely post your question.
+                    </span>
                   </div>
-                )
+                </div>
+              )
             ) : (
               <div className="mt-3 rounded-lg border border-border bg-background p-4 font-code text-xs text-muted-foreground">
                 {duplicateConflict

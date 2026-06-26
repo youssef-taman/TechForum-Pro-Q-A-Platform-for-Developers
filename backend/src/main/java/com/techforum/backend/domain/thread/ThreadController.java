@@ -23,13 +23,20 @@ public class ThreadController {
     return ResponseEntity.ok(threadService.suggestTags(request.title(), request.body()));
   }
 
-  @PostMapping("/checkDuplicates")
-  public ResponseEntity<List<DuplicateThreadDTO>> CheckDuplicates(
-      @Valid @RequestBody ThreadCreateDTO threadCreateDTO, Authentication authentication) {
+  // OLD:
+  // public ResponseEntity<List<DuplicateThreadDTO>> CheckDuplicates(
+  //     @Valid @RequestBody ThreadCreateDTO threadCreateDTO, Authentication authentication) {
+  //   List<DuplicateThreadDTO> duplicates =
+  //       threadService.CheckDuplicates(threadCreateDTO, authentication);
+  //   return ResponseEntity.status(HttpStatus.CREATED).body(duplicates);
+  // }
 
+  // NEW:
+  public ResponseEntity<List<DuplicateThreadDTO>> checkDuplicates(
+      @Valid @RequestBody ThreadCreateDTO threadCreateDTO, Authentication authentication) {
     List<DuplicateThreadDTO> duplicates =
-        threadService.CheckDuplicates(threadCreateDTO, authentication);
-    return ResponseEntity.status(HttpStatus.CREATED).body(duplicates);
+        threadService.checkDuplicates(threadCreateDTO, authentication);
+    return ResponseEntity.ok(duplicates);
   }
 
   @PostMapping
@@ -64,6 +71,12 @@ public class ThreadController {
       @PathVariable UUID threadId, Authentication authentication) {
     threadService.deleteThread(threadId, authentication);
     return ResponseEntity.noContent().build();
+  }
+
+  @GetMapping("/{threadId}")
+  public ResponseEntity<ThreadDTO> getThreadById(@PathVariable UUID threadId) {
+    ThreadDTO thread = threadService.getThreadById(threadId);
+    return ResponseEntity.ok(thread);
   }
 
   @GetMapping("/user/{username}")

@@ -12,13 +12,13 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("comments")
+@RequestMapping("/comments")
 @RequiredArgsConstructor
 public class CommentController {
 
   private final CommentService commentService;
 
-  @GetMapping("{threadId}")
+  @GetMapping("/{threadId}")
   public ResponseEntity<Page<CommentDTO>> getThreadComments(
       @PathVariable UUID threadId,
       @RequestParam(defaultValue = "0") int page,
@@ -30,7 +30,7 @@ public class CommentController {
     return ResponseEntity.ok(commentDTOPage);
   }
 
-  @GetMapping("{commentId}/replies")
+  @GetMapping("/{commentId}/replies")
   public ResponseEntity<Page<CommentDTO>> getCommentReplies(
       @PathVariable UUID commentId,
       @RequestParam(defaultValue = "0") int page,
@@ -56,11 +56,29 @@ public class CommentController {
     return ResponseEntity.noContent().build();
   }
 
+  // OLD:
+  // @PatchMapping("/{commentId}")
+  // public ResponseEntity<CommentDTO> updateComment(
+  //     @PathVariable UUID commentId,
+  //     @Valid @RequestBody String updatedContent,
+  //     Authentication authentication) {
+  //   CommentDTO commentDTO = commentService.updateComment(commentId, updatedContent,
+  // authentication);
+  //   return ResponseEntity.ok(commentDTO);
+  // }
+
+  // NEW:
   @PatchMapping("/{commentId}")
   public ResponseEntity<CommentDTO> updateComment(
       @PathVariable UUID commentId,
-      @Valid @RequestBody String updatedContent,
+      @RequestBody java.util.Map<String, String> payload,
       Authentication authentication) {
+
+    String updatedContent = payload.get("content");
+    if (updatedContent == null || updatedContent.isBlank()) {
+      throw new IllegalArgumentException("Content cannot be empty");
+    }
+
     CommentDTO commentDTO = commentService.updateComment(commentId, updatedContent, authentication);
     return ResponseEntity.ok(commentDTO);
   }
