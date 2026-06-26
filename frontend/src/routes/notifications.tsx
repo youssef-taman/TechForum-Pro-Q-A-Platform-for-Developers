@@ -1,17 +1,27 @@
 import {createFileRoute} from "@tanstack/react-router";
+import type {Page} from "@/types";
 import {useEffect, useState} from "react";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import {toast} from "sonner";
 
-type NotificationItem = {
-  id: string | number;
-  content: string;
-  createdAt: string;
-  isRead?: boolean;
-};
+// type NotificationItem = {
+//   id: string | number;
+//   content: string;
+//   createdAt: string;
+//   isRead?: boolean;
+// };
 
-type NotificationPage = {
-  content?: NotificationItem[];
+// type NotificationPage = {
+//   content?: NotificationItem[];
+// };
+
+type NotificationItem = {
+  id: string;
+  type: string; // Matches backend DTO
+  message: string; // Matches backend DTO (was 'content')
+  link: string; // Matches backend DTO
+  isRead: boolean;
+  createdAt: string;
 };
 
 export const Route = createFileRoute("/notifications")({
@@ -27,10 +37,14 @@ function NotificationsPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const data = (await apiFetch(
+        // const data = (await apiFetch(
+        //   `${API_ENDPOINTS.notifications}?page=0&size=50`,
+        // )) as NotificationPage;
+        // setNotifications(data.content ?? []);
+        const data = await apiFetch<Page<NotificationItem>>(
           `${API_ENDPOINTS.notifications}?page=0&size=50`,
-        )) as NotificationPage;
-        setNotifications(data.content ?? []);
+        );
+        setNotifications(data.content);
       } catch {
         toast.error("Failed to load notifications");
       } finally {
@@ -69,7 +83,8 @@ function NotificationsPage() {
               key={n.id}
               className={`rounded p-3 ${n.isRead ? "bg-background/60" : "bg-surface"}`}
             >
-              <div className="text-sm font-medium">{n.content}</div>
+              {/* <div className="text-sm font-medium">{n.content}</div> */}
+              <div className="text-sm font-medium">{n.message}</div>
               <div className="text-[11px] text-muted-foreground">
                 {new Date(n.createdAt).toLocaleString()}
               </div>
