@@ -1,5 +1,6 @@
 package com.techforum.backend.domain.user;
 
+import com.techforum.backend.domain.user.dtos.AdminMetricsDTO;
 import com.techforum.backend.domain.user.dtos.UserDTO;
 import com.techforum.backend.domain.user.enums.RoleType;
 import jakarta.validation.constraints.Min;
@@ -41,6 +42,13 @@ public class UserController {
     return ResponseEntity.noContent().build();
   }
 
+  @PatchMapping("/{id}/unsuspend")
+  @PreAuthorize("hasRole('ADMIN')")
+  public ResponseEntity<Void> unsuspend(@PathVariable UUID id) {
+    userService.unsuspendUser(id);
+    return ResponseEntity.noContent().build();
+  }
+
   @DeleteMapping("/{id}")
   @PreAuthorize("hasRole('ADMIN')")
   public ResponseEntity<Void> removeUser(@PathVariable UUID id) {
@@ -52,9 +60,17 @@ public class UserController {
   @PreAuthorize("hasRole('ADMIN')")
   public ResponseEntity<Page<UserDTO>> listUsers(
       @RequestParam(defaultValue = "0") @Min(0) int page,
-      @RequestParam(defaultValue = "10") @Positive int size) {
-    Page<UserDTO> userPage = userService.listUsers(page, size);
+      @RequestParam(defaultValue = "10") @Positive int size,
+      @RequestParam(required = false) String q) { // <-- This must be here
+
+    Page<UserDTO> userPage = userService.listUsers(page, size, q); // <-- Pass 'q' here
     return ResponseEntity.ok(userPage);
+  }
+
+  @GetMapping("/metrics")
+  @PreAuthorize("hasRole('ADMIN')")
+  public AdminMetricsDTO getMetrics() {
+    return userService.getMetrics();
   }
 
   public record PromotionRequest(RoleType role) {}

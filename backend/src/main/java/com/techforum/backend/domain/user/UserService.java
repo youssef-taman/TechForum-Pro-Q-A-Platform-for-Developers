@@ -1,6 +1,9 @@
 package com.techforum.backend.domain.user;
 
 import com.techforum.backend.common.exception.user.UserNotFoundException;
+import com.techforum.backend.domain.thread.ThreadRepository;
+import com.techforum.backend.domain.thread.enums.ThreadStatus;
+import com.techforum.backend.domain.user.dtos.AdminMetricsDTO;
 import com.techforum.backend.domain.user.dtos.UserDTO;
 import com.techforum.backend.domain.user.enums.RoleType;
 import com.techforum.backend.domain.user.mappers.UserMapper;
@@ -21,6 +24,7 @@ import org.springframework.stereotype.Service;
 public class UserService {
   private final UserMapper userMapper;
   private final UserRepository userRepository;
+  private final ThreadRepository threadRepository;
 
   @Transactional
   public void promoteUser(UUID id, RoleType role) {
@@ -57,6 +61,17 @@ public class UserService {
   }
 
   @Transactional
+  public void unsuspendUser(UUID userId) {
+    verifyCurrentUserCanManageUsers();
+    User user =
+        userRepository
+            .findById(userId)
+            .orElseThrow(() -> new UserNotFoundException("User not found"));
+    verifyTargetUserCanBeManaged(user);
+    user.setSuspended(false);
+  }
+
+  @Transactional
   public void removeUser(UUID id) {
     verifyCurrentUserCanManageUsers();
     User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
@@ -64,9 +79,30 @@ public class UserService {
     userRepository.delete(user);
   }
 
-  public Page<UserDTO> listUsers(int page, int size) {
+  // public Page<UserDTO> listUsers(int page, int size) {
+  //   Pageable pageable = PageRequest.of(page, size, Sort.by("username").ascending());
+  //   return userRepository.findAll(pageable).map(userMapper::toDTO);
+  // }
+
+  public Page<UserDTO> listUsers(int page, int size, String q) {
     Pageable pageable = PageRequest.of(page, size, Sort.by("username").ascending());
-    return userRepository.findAll(pageable).map(userMapper::toDTO);
+
+    if (q == null || q.isBlank()) {
+      return userRepository.findAll(pageable).map(userMapper::toDTO);
+    }
+
+    // search by username or email (case-insensitive, substring match)
+    return userRepository
+        .findByUsernameContainingIgnoreCaseOrEmailContainingIgnoreCase(q, q, pageable)
+        .map(userMapper::toDTO);
+  }
+
+  public AdminMetricsDTO getMetrics() {
+    return new AdminMetricsDTO(
+        userRepository.count(),
+        threadRepository.countByStatus(ThreadStatus.OPEN),
+        threadRepository.countByStatus(ThreadStatus.RESOLVED),
+        threadRepository.countByStatus(ThreadStatus.CLOSED));
   }
 
   private void verifyCurrentUserCanManageUsers() {

@@ -49,4 +49,8 @@ public class User extends BaseEntity {
   @Column(name = "is_suspended", nullable = false)
   @Builder.Default
   private boolean isSuspended = false;
+
+  @Column(name = "is_email_verified", nullable = false)
+  @Builder.Default
+  private boolean isEmailVerified = true;
 }
