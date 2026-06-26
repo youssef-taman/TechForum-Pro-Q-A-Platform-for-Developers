@@ -29,8 +29,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
   private static final String AUTH_HEADER = "Authorization";
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String BLACKLIST_PREFIX = "blacklist:";
+
+  // private static final String[] PUBLIC_PATH_PREFIXES = {
+  //   "/auth/login", "/auth/register", "/swagger-ui", "/v3/api-docs"
+  // };
   private static final String[] PUBLIC_PATH_PREFIXES = {
-    "/auth/login", "/auth/register", "/swagger-ui", "/v3/api-docs"
+    "/auth/", "/swagger-ui/", "/v3/api-docs/", "/actuator/"
   };
 
   private final JwtUtil jwtUtil;
@@ -67,6 +71,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     String authHeader = request.getHeader(AUTH_HEADER);
 
     if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+      // Fallback: allow token via query parameter for transports that can't set headers
+      // (SSE/EventSource)
+      String param = request.getParameter("access_token");
+      if (param != null && !param.isBlank()) {
+        return Optional.of(param.trim());
+      }
       return Optional.empty();
     }
 

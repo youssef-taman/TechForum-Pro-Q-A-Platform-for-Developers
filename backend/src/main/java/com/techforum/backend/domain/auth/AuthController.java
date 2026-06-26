@@ -1,7 +1,13 @@
 package com.techforum.backend.domain.auth;
 
+import com.techforum.backend.domain.auth.dto.AuthActionResponseDTO;
 import com.techforum.backend.domain.auth.dto.AuthResponseDTO;
+import com.techforum.backend.domain.auth.dto.ChangePasswordRequestDTO;
+import com.techforum.backend.domain.auth.dto.EmailVerificationConfirmDTO;
+import com.techforum.backend.domain.auth.dto.EmailVerificationRequestDTO;
 import com.techforum.backend.domain.auth.dto.LoginRequestDTO;
+import com.techforum.backend.domain.auth.dto.PasswordResetConfirmDTO;
+import com.techforum.backend.domain.auth.dto.PasswordResetRequestDTO;
 import com.techforum.backend.domain.auth.dto.RegisterRequestDTO;
 import com.techforum.backend.domain.auth.filter.JwtAuthFilter;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +19,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -36,6 +43,10 @@ public class AuthController {
   private static final String LOGIN_PATH = "/login";
   private static final String REGISTER_PATH = "/register";
   private static final String LOGOUT_PATH = "/logout";
+  private static final String PASSWORD_RESET_REQUEST_PATH = "/password-reset/request";
+  private static final String PASSWORD_RESET_CONFIRM_PATH = "/password-reset/confirm";
+  private static final String EMAIL_VERIFICATION_REQUEST_PATH = "/email-verification/request";
+  private static final String EMAIL_VERIFICATION_CONFIRM_PATH = "/email-verification/confirm";
 
   private static final String AUTHORIZATION_HEADER = "Authorization";
   private static final String BEARER_AUTHENTICATION_SCHEME = "Bearer Authentication";
@@ -47,6 +58,8 @@ public class AuthController {
   private static final String USER_ALREADY_EXISTS_DESCRIPTION =
       "Validation failed or user already exists";
   private static final String TOKEN_REVOKED_DESCRIPTION = "Token revoked or already expired";
+  private static final String TOKEN_GENERATED_DESCRIPTION = "Authentication token generated";
+  private static final String TOKEN_CONFIRMED_DESCRIPTION = "Authentication token confirmed";
 
   private final AuthService authService;
 
@@ -116,11 +129,65 @@ public class AuthController {
     return noContent();
   }
 
-  private ResponseEntity<AuthResponseDTO> ok(AuthResponseDTO response) {
+  @Operation(
+      summary = "Request password reset",
+      description = "Generate a password reset token for an existing account.",
+      responses = {@ApiResponse(responseCode = "200", description = TOKEN_GENERATED_DESCRIPTION)})
+  @PostMapping(PASSWORD_RESET_REQUEST_PATH)
+  public ResponseEntity<AuthActionResponseDTO> requestPasswordReset(
+      @Valid @RequestBody PasswordResetRequestDTO request) {
+    return ok(authService.requestPasswordReset(request));
+  }
+
+  @Operation(
+      summary = "Confirm password reset",
+      description = "Reset a password using a previously generated token.",
+      responses = {@ApiResponse(responseCode = "200", description = TOKEN_CONFIRMED_DESCRIPTION)})
+  @PostMapping(PASSWORD_RESET_CONFIRM_PATH)
+  public ResponseEntity<AuthActionResponseDTO> confirmPasswordReset(
+      @Valid @RequestBody PasswordResetConfirmDTO request) {
+    return ok(authService.confirmPasswordReset(request));
+  }
+
+  @Operation(
+      summary = "Change password",
+      description = "Allows an authenticated user to change their current password.",
+      responses = {
+        @ApiResponse(responseCode = "200", description = "Password changed successfully")
+      })
+  @SecurityRequirement(name = BEARER_AUTHENTICATION_SCHEME)
+  @PostMapping("/change-password")
+  public ResponseEntity<Void> changePassword(
+      @Valid @RequestBody ChangePasswordRequestDTO request, Authentication authentication) {
+    authService.changePassword(request, authentication);
+    return ResponseEntity.ok().build();
+  }
+
+  @Operation(
+      summary = "Request email verification",
+      description = "Generate an email verification token for an existing account.",
+      responses = {@ApiResponse(responseCode = "200", description = TOKEN_GENERATED_DESCRIPTION)})
+  @PostMapping(EMAIL_VERIFICATION_REQUEST_PATH)
+  public ResponseEntity<AuthActionResponseDTO> requestEmailVerification(
+      @Valid @RequestBody EmailVerificationRequestDTO request) {
+    return ok(authService.requestEmailVerification(request));
+  }
+
+  @Operation(
+      summary = "Confirm email verification",
+      description = "Mark an account email as verified using a previously generated token.",
+      responses = {@ApiResponse(responseCode = "200", description = TOKEN_CONFIRMED_DESCRIPTION)})
+  @PostMapping(EMAIL_VERIFICATION_CONFIRM_PATH)
+  public ResponseEntity<AuthActionResponseDTO> confirmEmailVerification(
+      @Valid @RequestBody EmailVerificationConfirmDTO request) {
+    return ok(authService.confirmEmailVerification(request));
+  }
+
+  private <T> ResponseEntity<T> ok(T response) {
     return ResponseEntity.ok(response);
   }
 
-  private ResponseEntity<AuthResponseDTO> created(AuthResponseDTO response) {
+  private <T> ResponseEntity<T> created(T response) {
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 
