@@ -9,6 +9,9 @@ import com.techforum.backend.domain.comment.mappers.CommentMapper;
 import com.techforum.backend.domain.interaction.Vote;
 import com.techforum.backend.domain.interaction.VoteRepository;
 import com.techforum.backend.domain.interaction.enums.VoteType;
+import com.techforum.backend.domain.notification.NotificationController;
+import com.techforum.backend.domain.notification.NotificationService;
+import com.techforum.backend.domain.notification.dtos.NotificationDTO;
 import com.techforum.backend.domain.thread.Thread;
 import com.techforum.backend.domain.thread.ThreadRepository;
 import com.techforum.backend.domain.user.User;
@@ -32,7 +35,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class CommentService {
-
+  private final NotificationController notificationController;
+  private final NotificationService notificationService;
   private final CommentRepository commentRepository;
   private final UserRepository userRepository;
   private final ThreadRepository threadRepository;
@@ -77,6 +81,50 @@ public class CommentService {
             .createdAt(Instant.now())
             .build();
     commentRepository.save(comment);
+
+    // 1. Get the parent comment author (if it's a reply)
+    if (addCommentDTO.parentId() != null) {
+      Comment parentComment =
+          commentRepository
+              .findById(addCommentDTO.parentId())
+              .orElseThrow(CommentNotFoundException::new);
+
+      String authorName = authentication.getName();
+
+      // Don't notify if replying to yourself
+      if (!parentComment.getAuthor().getUsername().equals(authorName)) {
+        String message = "@" + authorName + " replied to your comment.";
+        String link = "/questions/" + addCommentDTO.threadId();
+
+        // Create AND push to SSE via the controller
+        NotificationDTO dto =
+            notificationService.createNotification(
+                parentComment.getAuthor().getUsername(), "REPLY", message, link);
+        notificationController.sendNotificationToUser(parentComment.getAuthor().getUsername(), dto);
+      }
+    } else {
+      // Optional: Notify thread author that they got a new top-level comment
+      Thread targetThread = threadRepository.findById(addCommentDTO.threadId()).orElseThrow();
+      String authorName = authentication.getName();
+      if (!targetThread.getAuthor().getUsername().equals(authorName)) {
+        String message =
+            "@"
+                + authorName
+                + " commented on your thread: "
+                + targetThread
+                    .getTitle()
+                    .substring(0, Math.min(targetThread.getTitle().length(), 30))
+                + "...";
+        String link =
+            "/questions/"
+                + (comment.getThread() != null ? comment.getThread().getId() : "unknown-thread");
+
+        NotificationDTO dto =
+            notificationService.createNotification(
+                targetThread.getAuthor().getUsername(), "COMMENT", message, link);
+        notificationController.sendNotificationToUser(targetThread.getAuthor().getUsername(), dto);
+      }
+    }
     return commentMapper.toDTO(comment, null);
   }
 
@@ -100,16 +148,19 @@ public class CommentService {
                     a.getAuthority().equals("ROLE_ADMIN")
                         || a.getAuthority().equals("ROLE_MODERATOR"));
 
+    // 1. SECURITY CHECK FIRST: Prevent unauthorized DB writes
+    if (!isAdminOrMod && !comment.getAuthor().getUsername().equals(username)) {
+      throw new AccessDeniedException("You don't have permission to delete this comment!");
+    }
+
+    // 2. DATABASE UPDATES SECOND: Only run if authorized
     Comment currentAncestor = comment.getParent();
     while (currentAncestor != null) {
       commentRepository.decrementReplyCount(currentAncestor.getId());
       currentAncestor = currentAncestor.getParent();
     }
 
-    if (!isAdminOrMod && !comment.getAuthor().getUsername().equals(username)) {
-      throw new AccessDeniedException("You don't have permission to delete this comment!");
-    }
-
+    // 3. DELETE LAST
     commentRepository.delete(comment);
   }
 

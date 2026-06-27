@@ -95,4 +95,6 @@ public interface ThreadRepository
   void deleteThreadEmbeddingByThreadId(@Param("threadId") UUID threadId);
 
   long countByStatus(ThreadStatus status);
+
+  Page<Thread> findByStatus(ThreadStatus status, Pageable pageable);
 }

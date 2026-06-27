@@ -8,6 +8,9 @@ import com.techforum.backend.domain.comment.CommentRepository;
 import com.techforum.backend.domain.interaction.dtos.BookmarkDTO;
 import com.techforum.backend.domain.interaction.enums.VoteType;
 import com.techforum.backend.domain.interaction.mappers.BookmarkMapper;
+import com.techforum.backend.domain.notification.NotificationController;
+import com.techforum.backend.domain.notification.NotificationService;
+import com.techforum.backend.domain.notification.dtos.NotificationDTO;
 import com.techforum.backend.domain.thread.Thread;
 import com.techforum.backend.domain.thread.ThreadRepository;
 import com.techforum.backend.domain.user.User;
@@ -24,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class InteractionService {
+  private final NotificationService notificationService;
+  private final NotificationController notificationController;
   private final BookmarkRepository bookmarkRepository;
   private final UserRepository userRepository;
   private final ThreadRepository threadRepository;
@@ -113,8 +118,22 @@ public class InteractionService {
       comment.setScore(comment.getScore() + voteType.getValue());
 
       Vote newVote = Vote.builder().comment(comment).voter(user).type(voteType).build();
-
       voteRepository.save(newVote);
+
+      // --- Trigger Notification for NEW votes only ---
+      // Don't notify the user if they are voting on their own comment
+      if (!comment.getAuthor().getUsername().equals(currentUserIdentifier)) {
+        String action = (voteType == VoteType.UPVOTE) ? "upvoted" : "downvoted";
+        String message = "@" + currentUserIdentifier + " " + action + " your comment.";
+        String link =
+            "/questions/"
+                + (comment.getThread() != null ? comment.getThread().getId() : "unknown-thread");
+        // Create AND push to SSE
+        NotificationDTO dto =
+            notificationService.createNotification(
+                comment.getAuthor().getUsername(), "VOTE", message, link);
+        notificationController.sendNotificationToUser(comment.getAuthor().getUsername(), dto);
+      }
     }
   }
 }
