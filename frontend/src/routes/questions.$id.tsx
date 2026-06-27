@@ -167,8 +167,35 @@ function removeCommentFromTree(
     }));
 }
 
-async function loadReplyTree(commentId: string): Promise<CommentNode[]> {
+// async function loadReplyTree(commentId: string): Promise<CommentNode[]> {
+//   const pageSize = 100;
+//   const firstPage = await apiFetch<Page<Comment>>(
+//     `${API_ENDPOINTS.commentReplies(commentId)}?page=0&size=${pageSize}&sortBy=latest`,
+//   );
+
+//   const allReplies: Comment[] = [...firstPage.content];
+//   for (let page = 1; page < firstPage.totalPages; page += 1) {
+//     const data = await apiFetch<Page<Comment>>(
+//       `${API_ENDPOINTS.commentReplies(commentId)}?page=${page}&size=${pageSize}&sortBy=latest`,
+//     );
+//     allReplies.push(...data.content);
+//   }
+
+//   return Promise.all(
+//     allReplies.map(async (reply) => ({
+//       ...reply,
+//       replies: await loadReplyTree(reply.id),
+//     })),
+//   );
+// }
+
+async function loadReplyTree(commentId: string, depth = 0): Promise<CommentNode[]> {
+  // SAFETY: Prevent infinite loops / Stack Overflow from circular references
+  if (depth > 10) return [];
+
   const pageSize = 100;
+  const visited = new Set<string>(); // Prevent fetching the same ID twice
+
   const firstPage = await apiFetch<Page<Comment>>(
     `${API_ENDPOINTS.commentReplies(commentId)}?page=0&size=${pageSize}&sortBy=latest`,
   );
@@ -182,11 +209,15 @@ async function loadReplyTree(commentId: string): Promise<CommentNode[]> {
   }
 
   return Promise.all(
-    allReplies.map(async (reply) => ({
-      ...reply,
-      replies: await loadReplyTree(reply.id),
-    })),
-  );
+    allReplies.map(async (reply) => {
+      if (visited.has(reply.id)) return null;
+      visited.add(reply.id);
+      return {
+        ...reply,
+        replies: await loadReplyTree(reply.id, depth + 1),
+      };
+    }),
+  ).then((results) => results.filter((r): r is CommentNode => r !== null));
 }
 
 async function loadCommentTree(
@@ -671,25 +702,27 @@ function QuestionDetail() {
     try {
       const replies = await loadReplyTree(comment.id);
       const replyVotes = buildVoteMap(replies);
-      // compute total descendant reply count (include nested replies)
-      const countDescendants = (nodes: CommentNode[]): number => {
-        let total = 0;
-        for (const n of nodes) {
-          total += 1; // this reply
-          if (n.replies && n.replies.length > 0)
-            total += countDescendants(n.replies);
-        }
-        return total;
-      };
       const totalReplies = countDescendants(replies);
 
-      setComments((current) =>
-        updateCommentTree(current, comment.id, (node) => ({
-          ...node,
-          replies,
-          totalReplies: totalReplies,
-        })),
-      );
+      // NEW: Handle AI comment separately since it lives outside the comments tree
+      if (aiComment && aiComment.id === comment.id) {
+        setAiComment((current) => {
+          if (!current) return null;
+          return {
+            ...current,
+            replies,
+            totalReplies,
+          };
+        });
+      } else {
+        setComments((current) =>
+          updateCommentTree(current, comment.id, (node) => ({
+            ...node,
+            replies,
+            totalReplies: totalReplies,
+          })),
+        );
+      }
       setVotedComments((current) => ({...current, ...replyVotes}));
     } catch {
       toast.error("Failed to load replies");
@@ -809,30 +842,22 @@ function QuestionDetail() {
     if (!commentDeleteId) return;
     setDeletingComment(true);
     try {
-      await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), {
-        method: "DELETE",
-      });
-      // compute deleted node descendant count to update ancestor counts and thread total
-      const nodeToDelete = findCommentNode(comments, commentDeleteId);
-      const removedCount = nodeToDelete
-        ? 1 + countDescendants(nodeToDelete.replies)
-        : 1;
-      setComments((prev) => {
-        const removed = removeCommentFromTree(prev, commentDeleteId);
-        // decrement ancestor reply counts by removedCount
-        return updateAncestorCounts(removed, commentDeleteId, -removedCount);
-      });
-      if (thread)
-        setThread((t) => ({
-          ...(t as Thread),
-          numberComments: t.numberComments - removedCount,
-        }));
+      const res = await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), { method: "DELETE" });
+
+      // ONLY update UI if backend actually returned success
+      if (res === null || res.ok) {
+          const nodeToDelete = findCommentNode(comments, commentDeleteId);
+          const removedCount = nodeToDelete ? 1 + countDescendants(nodeToDelete.replies) : 1;
+          setComments((prev) => {
+              const removed = removeCommentFromTree(prev, commentDeleteId);
+              return updateAncestorCounts(removed, commentDeleteId, -removedCount);
+          });
+          if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments - removedCount}));
+      }
       toast.success("Comment deleted");
       setCommentDeleteId(null);
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to delete comment",
-      );
+        toast.error(err instanceof Error ? err.message : "Failed to delete comment");
     } finally {
       setDeletingComment(false);
     }
@@ -844,10 +869,63 @@ function QuestionDetail() {
       if (!silent) setLoadingComments(true);
       try {
         const data = await loadCommentTree(id, commentsPage, commentSort);
-        const {nodes, aiComment: nextAiComment} = extractAiComment(data.tree);
-        setComments(nodes);
-        setAiComment(nextAiComment);
-        setVotedComments(buildVoteMap(data.tree));
+        const {nodes: newTopLevelNodes, aiComment: nextAiComment} =
+          extractAiComment(data.tree);
+
+        // SMART MERGE: Preserve nested replies that were already loaded
+        setComments((prevComments) => {
+          return newTopLevelNodes.map((newNode) => {
+            const existingNode = prevComments.find((n) => n.id === newNode.id);
+
+            if (existingNode && existingNode.replies.length > 0) {
+              const backendCount = newNode.totalReplies ?? newNode.replyCount;
+
+              // CRITICAL FIX: If the backend count is LESS than our loaded count,
+              // it means a reply was deleted! Discard the cached replies.
+              if (backendCount < existingNode.replies.length) {
+                return {
+                  ...newNode,
+                  replies: [], // Wipe the cache so deleted comments don't reappear
+                  totalReplies: backendCount
+                };
+              }
+
+              return {
+                ...newNode,
+                replies: existingNode.replies,
+                totalReplies: Math.max(backendCount, existingNode.replies.length),
+              };
+            }
+            return newNode;
+          });
+        });
+
+        // setAiComment(nextAiComment);
+        // Inside reloadComments, replace:
+// setAiComment(nextAiComment);
+// With:
+        setAiComment((prevAiComment) => {
+          if (!prevAiComment || !nextAiComment) return nextAiComment;
+          if (prevAiComment.id !== nextAiComment.id) return nextAiComment;
+
+          const backendCount = nextAiComment.totalReplies ?? nextAiComment.replyCount;
+
+          // If backend count dropped, a reply was deleted — wipe cache
+          if (backendCount < prevAiComment.replies.length) {
+            return {
+              ...nextAiComment,
+              replies: [],
+              totalReplies: backendCount,
+            };
+          }
+
+          return {
+            ...nextAiComment,
+            replies: prevAiComment.replies,
+            totalReplies: Math.max(backendCount, prevAiComment.replies.length),
+          };
+        });
+        setVotedComments(buildVoteMap(newTopLevelNodes));
         setTotalCommentPages(data.totalPages);
         return !!nextAiComment;
       } catch {
@@ -935,13 +1013,19 @@ function QuestionDetail() {
     const load = async () => {
       setLoadingThread(true);
       try {
+        let threadData: Thread;
         if (author) {
-          setThread(
-            await apiFetch<Thread>(API_ENDPOINTS.threadExpand(author, id)),
-          );
+          threadData = await apiFetch<Thread>(API_ENDPOINTS.threadExpand(author, id));
         } else {
-          setThread(await apiFetch<Thread>(API_ENDPOINTS.threadById(id)));
+          threadData = await apiFetch<Thread>(API_ENDPOINTS.threadById(id));
         }
+
+        // SAFETY CHECK: Ensure arrays and strings are never null to prevent React crashes
+        setThread({
+          ...threadData,
+          body: threadData.body ?? "",
+          tags: threadData.tags ?? [],
+        });
       } catch {
         toast.error("Failed to load thread");
       } finally {
@@ -1401,6 +1485,7 @@ function QuestionDetail() {
                     <SelectItem value="OPEN">Open</SelectItem>
                     <SelectItem value="RESOLVED">Resolved</SelectItem>
                     <SelectItem value="CLOSED">Closed</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

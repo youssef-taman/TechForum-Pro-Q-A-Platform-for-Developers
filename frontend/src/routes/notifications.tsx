@@ -81,7 +81,7 @@ function NotificationsPage() {
           {notifications.map((n) => (
             <div
               key={n.id}
-              className={`rounded p-3 ${n.isRead ? "bg-background/60" : "bg-surface"}`}
+              className={`rounded p-3 border border-border ${n.isRead ? "opacity-60" : "border-l-2 border-l-neon"}`}
             >
               {/* <div className="text-sm font-medium">{n.content}</div> */}
               <div className="text-sm font-medium">{n.message}</div>
