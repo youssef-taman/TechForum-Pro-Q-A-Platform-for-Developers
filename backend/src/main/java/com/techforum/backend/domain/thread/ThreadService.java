@@ -5,6 +5,9 @@ import com.techforum.backend.common.exception.thread.DuplicateThreadException;
 import com.techforum.backend.common.exception.thread.ThreadNotFoundException;
 import com.techforum.backend.common.exception.user.UserNotFoundException;
 import com.techforum.backend.domain.ai.AiIntegrationService;
+import com.techforum.backend.domain.notification.NotificationController;
+import com.techforum.backend.domain.notification.NotificationService;
+import com.techforum.backend.domain.notification.dtos.NotificationDTO;
 import com.techforum.backend.domain.tag.Tag;
 import com.techforum.backend.domain.tag.TagRepository;
 import com.techforum.backend.domain.tag.dtos.TagDTO;
@@ -16,6 +19,7 @@ import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.thread.mappers.ThreadMapper;
 import com.techforum.backend.domain.user.User;
 import com.techforum.backend.domain.user.UserRepository;
+import com.techforum.backend.domain.user.enums.RoleType;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.*;
@@ -41,6 +45,8 @@ public class ThreadService {
   private final AiIntegrationService aiIntegrationService;
   private final RedisCacheRepository redisRepository;
   private final ApplicationEventPublisher eventPublisher;
+  private final NotificationController notificationController;
+  private final NotificationService notificationService;
 
   private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
     double[] embeddingDouble =
@@ -128,10 +134,14 @@ public class ThreadService {
   }
 
   private @NonNull Thread saveThread(
-      ThreadCreateDTO threadCreateDTO, User author, Set<Tag> managedTags, float[] embedding) {
+      ThreadCreateDTO threadCreateDTO,
+      User author,
+      Set<Tag> managedTags,
+      float[] embedding,
+      ThreadStatus status) {
     Thread thread = this.threadMapper.toEntity(threadCreateDTO);
     thread.setAuthor(author);
-    thread.setStatus(ThreadStatus.OPEN);
+    thread.setStatus(status);
     thread.setCreatedAt(Instant.now());
     thread.setTags(managedTags);
     threadRepository.save(thread);
@@ -155,6 +165,7 @@ public class ThreadService {
     return managedTags;
   }
 
+  @Transactional(readOnly = true)
   public ThreadDTO getThreadById(UUID threadId) {
     Thread thread =
         threadRepository.findById(threadId).orElseThrow(() -> new ThreadNotFoundException());
@@ -170,7 +181,9 @@ public class ThreadService {
         .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
 
     float[] embedding = getThreadEmbedding(threadCreateDTO);
-
+    if (embedding == null || embedding.length == 0) {
+      return Collections.emptyList();
+    }
     //      checkDuplicationInTrendingThreads(embedding, 3);
     return searchDuplicateThreadsInArchive(embedding, MATCHING_THRESHOLD, 3);
   }
@@ -187,8 +200,16 @@ public class ThreadService {
 
     float[] embedding = getThreadEmbedding(threadCreateDTO);
 
+    if (embedding == null || embedding.length == 0) {
+      embedding = new float[0];
+    }
     Set<Tag> managedTags = getOrCreateTags(threadCreateDTO.tags());
-    Thread thread = saveThread(threadCreateDTO, author, managedTags, embedding);
+    ThreadStatus initialStatus = ThreadStatus.PENDING;
+    if (author.getRole() == RoleType.MODERATOR || author.getRole() == RoleType.ADMIN) {
+      initialStatus = ThreadStatus.OPEN; // Mods and Admins bypass the queue
+    }
+
+    Thread thread = saveThread(threadCreateDTO, author, managedTags, embedding, initialStatus);
 
     eventPublisher.publishEvent(
         new ThreadCreatedEvent(thread.getId(), thread.getTitle(), thread.getBody()));
@@ -261,6 +282,21 @@ public class ThreadService {
     threadRepository.save(thread);
     threadRepository.updateThreadEmbedding(threadEmbedding);
 
+    // Notify thread author if an Admin/Mod changes their thread status
+    if (threadUpdateDTO.status() != null
+        && !thread.getAuthor().getUsername().equals(authentication.getName())) {
+      String message =
+          "@"
+              + authentication.getName()
+              + " changed your thread status to "
+              + threadUpdateDTO.status().toString();
+      String link = "/questions/" + threadId;
+
+      NotificationDTO dto =
+          notificationService.createNotification(
+              thread.getAuthor().getUsername(), "STATUS_UPDATE", message, link);
+      notificationController.sendNotificationToUser(thread.getAuthor().getUsername(), dto);
+    }
     return threadMapper.toDTO(thread);
   }
 
@@ -269,6 +305,7 @@ public class ThreadService {
 
     QThread thread = QThread.thread;
     BooleanBuilder filterBuilder = new BooleanBuilder();
+    filterBuilder.and(thread.status.ne(ThreadStatus.PENDING));
 
     if (!threadSearchDTO.semanticAiSearch()) {
       if (threadSearchDTO.keyword() != null && !threadSearchDTO.keyword().isBlank()) {
@@ -308,7 +345,7 @@ public class ThreadService {
       filterBuilder.and(thread.createdAt.loe(toTime));
     }
 
-    if (targetAuthor != null) {
+    if (targetAuthor != null && !targetAuthor.isBlank()) {
       filterBuilder.and(QThread.thread.author.username.equalsIgnoreCase(targetAuthor));
     }
 
@@ -374,7 +411,12 @@ public class ThreadService {
         buildPage(threadSearchDTO.page(), threadSearchDTO.size(), threadSearchDTO.sortBy());
 
     if (!threadSearchDTO.semanticAiSearch()) {
-      filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
+      String authorFilter = threadSearchDTO.author();
+      if (authorFilter == null || authorFilter.isBlank()) {
+          authorFilter = null; // ensure null if empty
+      }
+      filterBuilder = buildSearchEngine(threadSearchDTO, authorFilter);
+      // filterBuilder.and(searchFilters);
       Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
       return threadPage.map(threadMapper::toDTO);
     }
@@ -407,5 +449,32 @@ public class ThreadService {
     }
 
     return new PageImpl<>(sortedDtos, pageable, filteredThreads.size());
+  }
+
+  @Transactional(readOnly = true)
+  public Page<ThreadDTO> getPendingThreads(int page, int size) {
+    Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+    Page<Thread> pendingThreads = threadRepository.findByStatus(ThreadStatus.PENDING, pageable);
+    return pendingThreads.map(threadMapper::toDTO);
+  }
+
+  @Transactional
+  public ThreadDTO moderateThread(UUID threadId, Map<String, String> moderationData) {
+    Thread thread =
+        threadRepository
+            .findById(threadId)
+            .orElseThrow(() -> new ThreadNotFoundException(threadId, "Thread not found"));
+
+    String action = moderationData.get("action");
+    if ("approve".equalsIgnoreCase(action)) {
+      thread.setStatus(ThreadStatus.OPEN);
+    } else if ("reject".equalsIgnoreCase(action)) {
+      thread.setStatus(ThreadStatus.CLOSED);
+    } else {
+      throw new IllegalArgumentException("Invalid action: " + action);
+    }
+
+    threadRepository.save(thread);
+    return threadMapper.toDTO(thread);
   }
 }
