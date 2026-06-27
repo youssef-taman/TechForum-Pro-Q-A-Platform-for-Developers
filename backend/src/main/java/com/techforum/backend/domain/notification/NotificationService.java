@@ -33,13 +33,17 @@ public class NotificationService {
   }
 
   @Transactional
-  public void createNotification(
+  public NotificationDTO createNotification(
       String recipientUsername, String type, String message, String link) {
     Notification notification = new Notification();
     notification.setRecipientUsername(recipientUsername);
     notification.setType(type);
     notification.setMessage(message);
     notification.setLink(link);
-    notificationRepository.save(notification);
+
+    Notification saved = notificationRepository.save(notification);
+
+    // Return the DTO so controllers can push it to the SSE stream
+    return notificationMapper.toDto(saved);
   }
 }
