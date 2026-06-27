@@ -358,9 +358,17 @@ function AskPage() {
 
     try {
       const [threadResult, suggestionsResult] = await Promise.allSettled([
+        // apiFetch(API_ENDPOINTS.threadDuplicateCheck, {
+        //   method: "POST",
+        //   body: JSON.stringify({title: title.trim(), body: body.trim()}),
+        // }),
         apiFetch(API_ENDPOINTS.threadDuplicateCheck, {
           method: "POST",
-          body: JSON.stringify({title: title.trim(), body: body.trim()}),
+          body: JSON.stringify({
+            title: title.trim(),
+            body: body.trim(),
+            tags: tags.map((name) => ({name})),
+          }),
         }),
         apiFetch<string[]>(API_ENDPOINTS.threadTagRecommendations, {
           method: "POST",
@@ -474,15 +482,7 @@ function AskPage() {
         }),
       );
     }
-  }, [
-    step,
-    title,
-    body,
-    tags,
-    tagSuggestions,
-    duplicateSuggestions,
-    duplicateConflict,
-  ]);
+  }, [step, title, body, tags, tagSuggestions, duplicateSuggestions, duplicateConflict]);
 
   if (!isLoggedIn) {
     return (
