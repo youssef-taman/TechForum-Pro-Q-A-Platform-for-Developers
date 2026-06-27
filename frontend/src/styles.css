@@ -236,3 +236,79 @@ body {
 .dark input[type="date"] {
   color-scheme: dark;
 }
+
+/* ── Premium Neon Glow Effects ── */
+.text-neon {
+  text-shadow: 0 0 8px oklch(0.7 0.2 170 / 0.4);
+  transition: text-shadow 200ms ease;
+}
+
+.dark .text-neon {
+  text-shadow: 0 0 12px oklch(0.7 0.2 170 / 0.6);
+}
+
+/* Add glow to neon borders (Buttons, Inputs on focus) */
+.border-neon,
+.focus:border-neon {
+  box-shadow: 0 0 8px oklch(0.7 0.2 170 / 0.15);
+  transition: box-shadow 200ms ease;
+}
+
+.dark .border-neon,
+.dark .focus\:border-neon {
+  box-shadow: 0 0 10px oklch(0.7 0.2 170 / 0.25);
+}
+
+/* Intensify glow on hover for interactive elements */
+a:hover .text-neon,
+button:hover .text-neon {
+  text-shadow: 0 0 14px oklch(0.7 0.2 170 / 0.6);
+}
+
+/* ── Markdown Code Highlighting (Light & Dark) ── */
+.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Dark mode syntax colors */
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-literal,
+.dark .hljs-section,
+.dark .hljs-link {
+  color: oklch(0.7 0.2 170);
+  /* Neon green for keywords */
+}
+
+.dark .hljs-string,
+.dark .hljs-title,
+.dark .hljs-name,
+.dark .hljs-type,
+.dark .hljs-attribute,
+.dark .hljs-symbol,
+.dark .hljs-bullet {
+  color: oklch(0.75 0.15 250);
+  /* Primary purple/blue for strings */
+}
+
+.dark .hljs-comment,
+.dark .hljs-doctag {
+  color: oklch(0.55 0.02 260);
+  /* Muted gray for comments */
+  font-style: italic;
+}
+
+/* Light mode syntax colors */
+html:not(.dark) .hljs-keyword,
+html:not(.dark) .hljs-selector-tag,
+html:not(.dark) .hljs-literal {
+  color: oklch(0.45 0.18 170);
+  /* Darker neon for light mode */
+}
+
+html:not(.dark) .hljs-string,
+html:not(.dark) .hljs-title,
+html:not(.dark) .hljs-name {
+  color: oklch(0.35 0.15 250);
+}

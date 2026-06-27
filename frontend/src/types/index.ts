@@ -2,7 +2,7 @@
 // Aligned exactly with backend DTOs
 
 export type UserRole = "ADMIN" | "MODERATOR" | "USER";
-export type ThreadStatus = "OPEN" | "RESOLVED" | "CLOSED";
+export type ThreadStatus = "OPEN" | "RESOLVED" | "CLOSED" | "PENDING";
 export type VoteType = "UPVOTE" | "DOWNVOTE";
 
 export interface User {

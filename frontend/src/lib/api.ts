@@ -28,7 +28,7 @@ export const API_ENDPOINTS = {
         `${API_BASE_URL}/threads/user/${username}`,
     threadSearch: `${API_BASE_URL}/threads/search`,
     threadTagRecommendations: `${API_BASE_URL}/threads/suggestTags`,
-    threadDuplicateCheck: `${API_BASE_URL}/threads/checkDuplicates`,
+    threadDuplicateCheck: `${API_BASE_URL}/threads/duplicates`,
 
     // Tags
     tags: `${API_BASE_URL}/tags`,
@@ -51,6 +51,9 @@ export const API_ENDPOINTS = {
     markNotificationRead: (id: string) => `${API_BASE_URL}/notifications/${id}/read`,
     markAllNotificationsRead: `${API_BASE_URL}/notifications/read`,
     notificationsStream: `${API_BASE_URL}/notifications/stream`,
+
+    modPendingThreads: `${API_BASE_URL}/threads/moderation/pending`,
+    moderateThread: (id: string) => `${API_BASE_URL}/threads/${id}/moderate`,
 } as const;
 
 const TOKEN_KEY = "tf_access_token";
@@ -112,19 +115,22 @@ export async function apiFetch<T = unknown>(
     const res = await fetch(url, {...options, headers});
 
     if (res.status === 401 || res.status === 403) {
-        // Token expired or invalid — clear session and redirect
         clearAuth();
-        if (
-            typeof window !== "undefined" &&
-            !window.location.pathname.startsWith("/login")
-        ) {
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
             window.location.href = "/login";
         }
     }
 
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
-        throw new Error(text || `HTTP ${res.status}`);
+
+        // NEW: Try to parse the error as JSON to get the real backend message
+        try {
+            const errorJson = JSON.parse(text);
+            throw new Error(errorJson.message || text);
+        } catch {
+            throw new Error(text || `HTTP ${res.status}`);
+        }
     }
 
     if (res.status === 204) return null as T;
