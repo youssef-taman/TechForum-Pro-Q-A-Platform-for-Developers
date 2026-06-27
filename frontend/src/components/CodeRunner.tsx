@@ -3,6 +3,8 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import Editor from "@monaco-editor/react"; // <-- NEW IMPORT
+import * as esbuild from "esbuild-wasm";
+
 
 type CodeRunnerProps = {
   code: string;
@@ -299,39 +301,23 @@ export function CodeRunner({
         initialize?: (opts: {wasmURL: string}) => Promise<void>;
     };
 
+
     async function ensureEsbuild(): Promise<EsbuildType | null> {
         const w = window as unknown as {esbuild?: EsbuildType};
         if (w.esbuild) return w.esbuild;
 
         try {
-            await new Promise<void>((resolve, reject) => {
-                const s = document.createElement("script");
-                s.src =
-                    "https://unpkg.com/esbuild-wasm@0.18.11/lib/umd/esbuild.min.js";
-                s.onload = () => resolve();
-                s.onerror = () => reject(new Error("Failed to load esbuild"));
-                document.head.appendChild(s);
+            await esbuild.initialize({
+                wasmURL: new URL("esbuild-wasm/esbuild.wasm", import.meta.url).href,
             });
-
-            const loadedEsbuild = (window as unknown as {esbuild?: EsbuildType})
-                .esbuild;
-            if (
-                loadedEsbuild &&
-                typeof loadedEsbuild.initialize === "function"
-            ) {
-                await loadedEsbuild.initialize({
-                    wasmURL:
-                        "https://unpkg.com/esbuild-wasm@0.18.11/esbuild.wasm",
-                });
-            }
-            setEsbuildAvailable(Boolean(loadedEsbuild));
-            return loadedEsbuild ?? null;
+            w.esbuild = esbuild as unknown as EsbuildType;
+            setEsbuildAvailable(true);
+            return w.esbuild;
         } catch {
             setEsbuildAvailable(false);
             return null;
         }
     }
-
     if (!runnable) {
         return (
             <pre

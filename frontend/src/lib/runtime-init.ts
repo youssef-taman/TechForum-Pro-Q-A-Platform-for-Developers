@@ -1,21 +1,13 @@
 import { RUNTIME_CONFIG } from "./runtimeConfig";
+import * as esbuild from "esbuild-wasm";
 
 export async function prewarmEsbuild() {
   try {
-    // load esbuild-wasm script
-    const s = document.createElement("script");
-    s.src = "https://unpkg.com/esbuild-wasm@0.18.11/lib/umd/esbuild.min.js";
-    s.crossOrigin = "anonymous";
-    document.head.appendChild(s);
-    await new Promise<void>((resolve, reject) => {
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error("Failed to load esbuild"));
+    await esbuild.initialize({
+      wasmURL: new URL("esbuild-wasm/esbuild.wasm", import.meta.url).href,
     });
-    // allow access to the esbuild global injected by the script
-    const w = window as unknown as { esbuild?: { initialize?: (opts: { wasmURL: string }) => Promise<void> } };
-    if (w.esbuild && typeof w.esbuild.initialize === "function") {
-      await w.esbuild.initialize({ wasmURL: "https://unpkg.com/esbuild-wasm@0.18.11/esbuild.wasm" });
-    }
+    const w = window as unknown as { esbuild?: typeof esbuild };
+    w.esbuild = esbuild;
     return true;
   } catch (e) {
     console.warn("esbuild prewarm failed:", e);
@@ -33,7 +25,6 @@ export async function prewarmPyodide() {
       s.onload = () => resolve();
       s.onerror = () => reject(new Error("Failed to load pyodide"));
     });
-    // leave loadPyodide for on-demand to reduce startup cost
     return true;
   } catch (e) {
     console.warn("pyodide prewarm failed:", e);
