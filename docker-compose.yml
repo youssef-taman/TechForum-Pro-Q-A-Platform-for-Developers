@@ -33,6 +33,7 @@ services:
       - JWT_EXPIRATION_TIME=${JWT_EXPIRATION_TIME}
       - AI_SERVICE_URL=http://ai-service:8000
       - LLM_API_KEY=${LLM_API_KEY}
+      - ENV=production
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/actuator/health"]
       interval: 10s
