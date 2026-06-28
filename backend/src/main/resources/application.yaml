@@ -67,10 +67,38 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+      base-path: /actuator
   endpoint:
     health:
-      show-details: always
+      enabled: true
+      show-details: when_authorized
+      probes:
+        enabled: true
     prometheus:
+      enabled: true
+    metrics:
+      enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+      slo:
+        http.server.requests: 100ms, 500ms, 1s, 2s, 5s
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENV:development}
+
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
       enabled: true
 
 springdoc:
