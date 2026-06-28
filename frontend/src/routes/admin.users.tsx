@@ -31,6 +31,7 @@ import {
 import {Page} from "@/types";
 
 type UserSort = "username_asc" | "username_desc" | "role" | "suspended";
+
 export const Route = createFileRoute("/admin/users")({
     head: () => ({meta: [{title: "User Management — Admin"}]}),
     component: AdminUsersPage,
@@ -44,18 +45,17 @@ function AdminUsersPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [searchTerm, setSearchTerm] = useState("");
     const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+    const [suspendTarget, setSuspendTarget] = useState<User | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
 
     const load = useCallback(async (p = 0) => {
         setLoading(true);
         try {
-            const url = `${API_ENDPOINTS.users}?page=${p}&size=20${searchTerm ? `&q=${encodeURIComponent(
-                searchTerm,
-            )}` : ""}`;
-
+            const url = `${API_ENDPOINTS.users}?page=${p}&size=20${
+                searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : ""
+            }`;
             const data = await apiFetch<Page<User>>(url);
             let items = data.content;
-            // apply initial sort client-side
             items = applyUserSort(items, userSort);
             setUsers(items);
             setTotalPages(data.totalPages ?? 1);
@@ -70,7 +70,7 @@ function AdminUsersPage() {
         load(page);
     }, [page, load]);
 
-    // debounce searchTerm changes
+    // Debounce search
     useEffect(() => {
         const t = setTimeout(() => {
             setPage(0);
@@ -79,8 +79,8 @@ function AdminUsersPage() {
         return () => clearTimeout(t);
     }, [searchTerm, load]);
 
+    // Re-sort on sort change
     useEffect(() => {
-        // re-sort current list when sort option changes
         setUsers((prev) => applyUserSort(prev, userSort));
     }, [userSort]);
 
@@ -115,14 +115,12 @@ function AdminUsersPage() {
         withBusy(u.id, async () => {
             await apiFetch(API_ENDPOINTS.promote(u.id), {
                 method: "POST",
-                body: JSON.stringify({role: "MODERATOR"}), // FIX: body required
+                body: JSON.stringify({role: "MODERATOR"}),
             });
             setUsers((prev) =>
-                prev.map((x) =>
-                    x.id === u.id ? {...x, role: "MODERATOR"} : x,
-                ),
+                prev.map((x) => (x.id === u.id ? {...x, role: "MODERATOR"} : x)),
             );
-            toast.success(`${u.username} promoted to MODERATOR`);
+            toast.success(`${u.username} promoted to Moderator`);
         });
 
     const demote = (u: User) =>
@@ -131,27 +129,27 @@ function AdminUsersPage() {
             setUsers((prev) =>
                 prev.map((x) => (x.id === u.id ? {...x, role: "USER"} : x)),
             );
-            toast.success(`${u.username} demoted to USER`);
+            toast.success(`${u.username} demoted to User`);
         });
 
-    const suspend = (u: User) =>
+    const confirmSuspend = async () => {
+        if (!suspendTarget) return;
+        const u = suspendTarget;
+        setSuspendTarget(null);
         withBusy(u.id, async () => {
             await apiFetch(API_ENDPOINTS.suspend(u.id), {method: "PATCH"});
             setUsers((prev) =>
-                prev.map((x) =>
-                    x.id === u.id ? {...x, isSuspended: true} : x,
-                ),
+                prev.map((x) => (x.id === u.id ? {...x, isSuspended: true} : x)),
             );
             toast.success(`${u.username} suspended`);
         });
+    };
 
     const unsuspend = (u: User) =>
         withBusy(u.id, async () => {
-            await apiFetch(API_ENDPOINTS.unsuspend(u.id), {method: "POST"});
+            await apiFetch(API_ENDPOINTS.unsuspend(u.id), {method: "PATCH"});
             setUsers((prev) =>
-                prev.map((x) =>
-                    x.id === u.id ? {...x, isSuspended: false} : x,
-                ),
+                prev.map((x) => (x.id === u.id ? {...x, isSuspended: false} : x)),
             );
             toast.success(`${u.username} unsuspended`);
         });
@@ -175,85 +173,103 @@ function AdminUsersPage() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-code text-base font-bold">
                     <span className="text-muted-foreground">~/</span>users
                 </h2>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                     <input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Search users"
-                        className="rounded border border-border px-2 py-1 text-sm bg-transparent"
+                        placeholder="Search users…"
+                        className="rounded-lg border border-border bg-surface px-3 py-1.5 font-code text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon/20 transition-colors"
                     />
-                    <div className="w-48">
-                        <Select defaultValue={userSort} onValueChange={(v) => setUserSort(v as UserSort)}>
-                            <SelectTrigger>
+                    <div className="w-44">
+                        <Select
+                            defaultValue={userSort}
+                            onValueChange={(v) => setUserSort(v as UserSort)}
+                        >
+                            <SelectTrigger className="font-code text-xs">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="username_asc">Username ↑</SelectItem>
                                 <SelectItem value="username_desc">Username ↓</SelectItem>
                                 <SelectItem value="role">Role</SelectItem>
-                                <SelectItem value="suspended">Suspended</SelectItem>
+                                <SelectItem value="suspended">Suspended first</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
-                    <span className="font-code text-xs text-muted-foreground">{users.length} shown</span>
+                    <span className="font-code text-xs text-muted-foreground">
+                        {users.length} shown
+                    </span>
                 </div>
             </div>
 
+            {/* Table */}
             {loading ? (
                 <div className="flex justify-center py-16">
                     <Loader2 className="h-5 w-5 animate-spin text-neon" />
                 </div>
+            ) : users.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 py-16 text-center">
+                    <p className="font-code text-sm text-muted-foreground">No users found</p>
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm("")}
+                            className="mt-2 font-code text-xs text-neon hover:underline"
+                        >
+                            Clear search
+                        </button>
+                    )}
+                </div>
             ) : (
-                <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                    <table className="w-full font-code text-xs">
+                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                    <table className="w-full font-code text-sm">
                         <thead className="border-b border-border bg-surface/50">
                             <tr>
-                                {["Username", "Role", "Status", "Actions"].map(
-                                    (h) => (
-                                        <th
-                                            key={h}
-                                            className="px-4 py-3 text-left text-[10px] uppercase tracking-widest text-muted-foreground font-semibold"
-                                        >
-                                            {h}
-                                        </th>
-                                    ),
-                                )}
+                                {["Username", "Email", "Role", "Status", "Actions"].map((h) => (
+                                    <th
+                                        key={h}
+                                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground"
+                                    >
+                                        {h}
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
                             {users.map((u) => (
                                 <tr
                                     key={u.id}
-                                    className="hover:bg-surface/40 transition-colors"
+                                    className={`transition-colors hover:bg-surface/40 ${
+                                        u.isSuspended ? "opacity-60" : ""
+                                    }`}
                                 >
                                     <td className="px-4 py-3 font-medium text-foreground">
                                         @{u.username}
                                     </td>
+                                    <td className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={u.email ?? ""}>
+                                        {u.email ?? "—"}
+                                    </td>
                                     <td className="px-4 py-3">
                                         <span
-                                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${ROLE_STYLE[u.role] ?? ROLE_STYLE.USER}`}
+                                            className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                                ROLE_STYLE[u.role] ?? ROLE_STYLE.USER
+                                            }`}
                                         >
                                             {u.role}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3">
-                                        <span
-                                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                                                u.isSuspended
-                                                    ? "border-destructive/30 bg-destructive/10 text-destructive"
-                                                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                            }`}
-                                        >
-                                            <span
-                                                className={`h-1.5 w-1.5 rounded-full ${u.isSuspended ? "bg-destructive" : "bg-emerald-500"}`}
-                                            />
-                                            {u.isSuspended
-                                                ? "Suspended"
-                                                : "Active"}
+                                    <td className="px-4 py-3 w-32">
+                                        <span className={`inline-flex w-24 items-center justify-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                            u.isSuspended
+                                                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                                                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                        }`}>
+                                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${u.isSuspended ? "bg-destructive" : "bg-emerald-500"}`} />
+                                            {u.isSuspended ? "Suspended" : "Active"}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
@@ -264,60 +280,50 @@ function AdminUsersPage() {
                                                 <>
                                                     {u.role === "USER" && (
                                                         <button
-                                                            onClick={() =>
-                                                                promote(u)
-                                                            }
+                                                            onClick={() => promote(u)}
                                                             title="Promote to Moderator"
-                                                            className="rounded border border-amber-500/30 bg-amber-500/8 px-2 py-1 text-[10px] text-amber-600 hover:bg-amber-500/15 transition-colors"
+                                                            className="rounded border border-amber-500/30 bg-amber-500/8 px-2 py-1 text-xs text-amber-600 transition-colors hover:bg-amber-500/15"
                                                         >
-                                                            <ShieldCheck className="h-3 w-3 inline mr-1" />
+                                                            <ShieldCheck className="mr-1 inline h-3 w-3" />
                                                             Promote
                                                         </button>
                                                     )}
                                                     {u.role === "MODERATOR" && (
                                                         <button
-                                                            onClick={() =>
-                                                                demote(u)
-                                                            }
+                                                            onClick={() => demote(u)}
                                                             title="Demote to User"
-                                                            className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground hover:border-neon hover:text-neon transition-colors"
+                                                            className="rounded border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-neon hover:text-neon"
                                                         >
-                                                            <ShieldOff className="h-3 w-3 inline mr-1" />
+                                                            <ShieldOff className="mr-1 inline h-3 w-3" />
                                                             Demote
                                                         </button>
                                                     )}
                                                     {u.isSuspended ? (
                                                         <button
-                                                            onClick={() =>
-                                                                unsuspend(u)
-                                                            }
+                                                            onClick={() => unsuspend(u)}
                                                             title="Unsuspend"
-                                                            className="rounded border border-emerald-500/30 bg-emerald-500/8 px-2 py-1 text-[10px] text-emerald-600 hover:bg-emerald-500/15 transition-colors"
+                                                            className="rounded border border-emerald-500/30 bg-emerald-500/8 px-2 py-1 text-xs text-emerald-600 transition-colors hover:bg-emerald-500/15"
                                                         >
-                                                            <UserCheck className="h-3 w-3 inline mr-1" />
+                                                            <UserCheck className="mr-1 inline h-3 w-3" />
                                                             Unsuspend
                                                         </button>
                                                     ) : (
-                                                        <button
-                                                            onClick={() =>
-                                                                suspend(u)
-                                                            }
-                                                            title="Suspend"
-                                                            className="rounded border border-orange-500/30 bg-orange-500/8 px-2 py-1 text-[10px] text-orange-600 hover:bg-orange-500/15 transition-colors"
-                                                        >
-                                                            <UserX className="h-3 w-3 inline mr-1" />
-                                                            Suspend
-                                                        </button>
+                                                        u.role !== "ADMIN" && (
+                                                            <button
+                                                                onClick={() => setSuspendTarget(u)}
+                                                                title="Suspend"
+                                                                className="rounded border border-orange-500/30 bg-orange-500/8 px-2 py-1 text-xs text-orange-600 transition-colors hover:bg-orange-500/15"
+                                                            >
+                                                                <UserX className="mr-1 inline h-3 w-3" />
+                                                                Suspend
+                                                            </button>
+                                                        )
                                                     )}
                                                     {u.role !== "ADMIN" && (
                                                         <button
-                                                            onClick={() =>
-                                                                setDeleteTarget(
-                                                                    u,
-                                                                )
-                                                            }
+                                                            onClick={() => setDeleteTarget(u)}
                                                             title="Delete user"
-                                                            className="rounded border border-destructive/30 bg-destructive/8 p-1 text-destructive hover:bg-destructive/15 transition-colors"
+                                                            className="rounded border border-destructive/30 bg-destructive/8 p-1 text-destructive transition-colors hover:bg-destructive/15"
                                                         >
                                                             <Trash2 className="h-3 w-3" />
                                                         </button>
@@ -333,12 +339,13 @@ function AdminUsersPage() {
                 </div>
             )}
 
+            {/* Pagination */}
             {totalPages > 1 && (
                 <div className="flex justify-center gap-2 font-code text-xs">
                     <button
                         disabled={page === 0}
                         onClick={() => setPage((p) => p - 1)}
-                        className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:border-neon"
+                        className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:border-neon transition-colors"
                     >
                         ← Prev
                     </button>
@@ -348,18 +355,44 @@ function AdminUsersPage() {
                     <button
                         disabled={page >= totalPages - 1}
                         onClick={() => setPage((p) => p + 1)}
-                        className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:border-neon"
+                        className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:border-neon transition-colors"
                     >
                         Next →
                     </button>
                 </div>
             )}
 
+            {/* Suspend confirmation */}
+            <AlertDialog
+                open={!!suspendTarget}
+                onOpenChange={(open) => { if (!open) setSuspendTarget(null); }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Suspend @{suspendTarget?.username}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will lock the account immediately. The user won't be
+                            able to log in or access the platform until unsuspended.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmSuspend}
+                            className="bg-orange-600 text-white hover:bg-orange-700"
+                        >
+                            Suspend account
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Delete confirmation */}
             <AlertDialog
                 open={!!deleteTarget}
-                onOpenChange={(open) => {
-                    if (!open) setDeleteTarget(null);
-                }}
+                onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -367,8 +400,8 @@ function AdminUsersPage() {
                             Delete @{deleteTarget?.username}?
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This permanently removes the account and all their
-                            content. This cannot be undone.
+                            This permanently removes the account and all their content.
+                            This cannot be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

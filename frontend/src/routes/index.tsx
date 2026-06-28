@@ -225,12 +225,12 @@ function HomePage() {
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neon" />
               Developer Q&A, designed for speed
             </p>
-            <h1 className="max-w-lg text-2xl font-bold leading-tight text-foreground sm:text-3xl lg:text-4xl">
+            <h1 className="max-w-lg font-heading text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
               Find answers faster.
               <br />
               Ask better questions.
             </h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
+            <p className="mt-3 max-w-md font-code text-sm leading-6 text-muted-foreground">
               Search by topic, author, tags or date. Built for developers who
               want fast, clean answers.
             </p>
@@ -266,7 +266,7 @@ function HomePage() {
                 <p className="font-code text-[11px] uppercase tracking-widest text-muted-foreground">
                   {stat.label}
                 </p>
-                <p className="mt-1 text-xl font-bold text-foreground">
+                <p className="mt-1 font-heading text-xl font-bold text-foreground">
                   {stat.value}
                 </p>
               </div>
@@ -587,10 +587,10 @@ function HomePage() {
                         </span>
                       )}
                     </div>
-                    <h3 className="mt-1.5 line-clamp-1 text-sm font-semibold leading-snug text-foreground group-hover:text-neon transition-colors">
+                    <h3 className="mt-1.5 line-clamp-1 font-heading text-sm font-semibold leading-snug text-foreground group-hover:text-neon transition-colors">
                       {thread.title}
                     </h3>
-                    <div className="prose-feed mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                    <div className="prose-feed mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
                       <Markdown content={thread.body} compact />
                     </div>
                     <div className="mt-2 flex items-center gap-1.5 font-code text-xs text-muted-foreground">

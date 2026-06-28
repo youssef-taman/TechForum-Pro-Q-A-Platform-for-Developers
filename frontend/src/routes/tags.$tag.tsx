@@ -1,15 +1,15 @@
-import {createFileRoute, Link} from "@tanstack/react-router";
-import {useEffect, useMemo, useState} from "react";
-import {Loader2, Tag} from "lucide-react";
-import {toast} from "sonner";
-import {StatusBadge} from "@/components/StatusBadge";
-import {Markdown} from "@/components/Markdown";
-import {Tag as Tag2} from "@/components/Tag";
-import {apiFetch, API_ENDPOINTS} from "@/lib/api";
-import type {Page, Thread} from "@/types";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Tag } from "lucide-react";
+import { toast } from "sonner";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Markdown } from "@/components/Markdown";
+import { Tag as Tag2 } from "@/components/Tag";
+import { apiFetch, API_ENDPOINTS } from "@/lib/api";
+import type { Page, Thread } from "@/types";
 
 export const Route = createFileRoute("/tags/$tag")({
-  head: ({params}) => ({meta: [{title: `#${params.tag} — TechForum Pro`}]}),
+  head: ({ params }) => ({ meta: [{ title: `#${params.tag} — TechForum Pro` }] }),
   component: TagDetail,
 });
 
@@ -23,7 +23,7 @@ function relativeTime(iso: string) {
 }
 
 function TagDetail() {
-  const {tag} = Route.useParams();
+  const { tag } = Route.useParams();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,7 +67,7 @@ function TagDetail() {
             <p className="font-code text-xs text-muted-foreground">
               {loading
                 ? "Loading threads…"
-                : `${threads.length} threads with this tag`}
+                : `${threads.length} thread${threads.length !== 1 ? "s" : ""} with this tag`}
             </p>
           </div>
         </div>
@@ -75,7 +75,7 @@ function TagDetail() {
           to="/tags"
           className="font-code text-xs text-neon hover:underline"
         >
-          Back to all tags
+          ← All tags
         </Link>
       </div>
 
@@ -93,8 +93,8 @@ function TagDetail() {
             <Link
               key={thread.id}
               to="/questions/$id"
-              params={{id: thread.id}}
-              search={{author: thread.authorName}}
+              params={{ id: thread.id }}
+              search={{ author: thread.authorName }}
               className="group flex items-start gap-3 rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm transition-all hover:border-neon/40 hover:shadow-md"
             >
               <div className="flex min-w-13 flex-col items-center gap-1 pt-0.5">
@@ -106,9 +106,6 @@ function TagDetail() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <StatusBadge status={thread.status} />
-                  {/* {thread.tags?.slice(0, 3).map((threadTag) => (
-                                        <Tag2 key={threadTag.id} name={threadTag.name} compact />
-                                    ))} */}
                   {thread.tags?.slice(0, 3).map((threadTag) => (
                     <Tag2 key={threadTag.name} name={threadTag.name} compact />
                   ))}

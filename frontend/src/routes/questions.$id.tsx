@@ -17,6 +17,11 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
+  Lock,
+  ShieldCheck,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import {useCallback, useEffect, useState} from "react";
 import {toast} from "sonner";
@@ -81,20 +86,86 @@ type CommentNode = Comment & {replies: CommentNode[]};
 
 const TECHFORUM_AI_USERNAME = "TechForumAI";
 
+// ── Status permission helpers ─────────────────────────────────────────────────
+//
+// Lifecycle:  (system) PENDING → (mod) OPEN | CLOSED → (author) RESOLVED
+//
+// Author-allowed transitions:
+//   OPEN      → RESOLVED   (mark as solved)
+//   RESOLVED  → OPEN       (re-open if solution didn't hold)
+//
+// Mod/Admin-allowed transitions (full control):
+//   Any → Any
+//
+// PENDING and CLOSED are never settable by the author.
+
+function getAuthorStatusOptions(current: ThreadStatus): {value: ThreadStatus; label: string}[] {
+  switch (current) {
+    case "OPEN":
+      return [{value: "RESOLVED", label: "Resolved — mark as solved"}];
+    case "RESOLVED":
+      return [{value: "OPEN", label: "Open — reopen question"}];
+    default:
+      // PENDING and CLOSED: no transitions available to the author
+      return [];
+  }
+}
+
+function getModStatusOptions(): {value: ThreadStatus; label: string}[] {
+  return [
+    {value: "OPEN",     label: "Open"},
+    {value: "RESOLVED", label: "Resolved"},
+    {value: "CLOSED",   label: "Closed"},
+    {value: "PENDING",  label: "Pending"},
+  ];
+}
+
+// ─── Status banner for CLOSED / PENDING ──────────────────────────────────────
+function StatusBanner({status}: {status: ThreadStatus}) {
+  if (status === "CLOSED") {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/8 px-4 py-3">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+        <div className="font-code text-sm">
+          <span className="font-semibold text-destructive">This thread is closed.</span>
+          <span className="ml-1.5 text-muted-foreground">Commenting and voting are disabled.</span>
+        </div>
+      </div>
+    );
+  }
+  if (status === "PENDING") {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div className="font-code text-sm">
+          <span className="font-semibold text-amber-500">Awaiting moderation.</span>
+          <span className="ml-1.5 text-muted-foreground">This question is in the review queue and not yet visible to other users.</span>
+        </div>
+      </div>
+    );
+  }
+  if (status === "RESOLVED") {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+        <div className="font-code text-sm">
+          <span className="font-semibold text-green-500">Resolved.</span>
+          <span className="ml-1.5 text-muted-foreground">The author marked this question as solved.</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 function buildVoteMap(nodes: CommentNode[]): Record<string, VoteType> {
   const votes: Record<string, VoteType> = {};
-
   const visit = (currentNodes: CommentNode[]) => {
     for (const node of currentNodes) {
-      if (node.userVote) {
-        votes[node.id] = node.userVote;
-      }
-      if (node.replies.length > 0) {
-        visit(node.replies);
-      }
+      if (node.userVote) votes[node.id] = node.userVote;
+      if (node.replies.length > 0) visit(node.replies);
     }
   };
-
   visit(nodes);
   return votes;
 }
@@ -104,27 +175,17 @@ function extractAiComment(nodes: CommentNode[]): {
   aiComment: CommentNode | null;
 } {
   let aiComment: CommentNode | null = null;
-
   const nextNodes = nodes.flatMap((node) => {
     const nextRepliesResult = extractAiComment(node.replies);
-
     if (!aiComment && node.authorName === TECHFORUM_AI_USERNAME) {
       aiComment = {...node, replies: nextRepliesResult.nodes};
       return [];
     }
-
     if (nextRepliesResult.aiComment && !aiComment) {
       aiComment = nextRepliesResult.aiComment;
     }
-
-    return [
-      {
-        ...node,
-        replies: nextRepliesResult.nodes,
-      },
-    ];
+    return [{...node, replies: nextRepliesResult.nodes}];
   });
-
   return {nodes: nextNodes, aiComment};
 }
 
@@ -136,17 +197,11 @@ function updateCommentTree(
   return nodes.map((node) =>
     node.id === commentId
       ? updater(node)
-      : {
-          ...node,
-          replies: updateCommentTree(node.replies, commentId, updater),
-        },
+      : {...node, replies: updateCommentTree(node.replies, commentId, updater)},
   );
 }
 
-function findCommentNode(
-  nodes: CommentNode[],
-  commentId: string,
-): CommentNode | null {
+function findCommentNode(nodes: CommentNode[], commentId: string): CommentNode | null {
   for (const node of nodes) {
     if (node.id === commentId) return node;
     const child = findCommentNode(node.replies, commentId);
@@ -155,51 +210,19 @@ function findCommentNode(
   return null;
 }
 
-function removeCommentFromTree(
-  nodes: CommentNode[],
-  commentId: string,
-): CommentNode[] {
+function removeCommentFromTree(nodes: CommentNode[], commentId: string): CommentNode[] {
   return nodes
     .filter((node) => node.id !== commentId)
-    .map((node) => ({
-      ...node,
-      replies: removeCommentFromTree(node.replies, commentId),
-    }));
+    .map((node) => ({...node, replies: removeCommentFromTree(node.replies, commentId)}));
 }
 
-// async function loadReplyTree(commentId: string): Promise<CommentNode[]> {
-//   const pageSize = 100;
-//   const firstPage = await apiFetch<Page<Comment>>(
-//     `${API_ENDPOINTS.commentReplies(commentId)}?page=0&size=${pageSize}&sortBy=latest`,
-//   );
-
-//   const allReplies: Comment[] = [...firstPage.content];
-//   for (let page = 1; page < firstPage.totalPages; page += 1) {
-//     const data = await apiFetch<Page<Comment>>(
-//       `${API_ENDPOINTS.commentReplies(commentId)}?page=${page}&size=${pageSize}&sortBy=latest`,
-//     );
-//     allReplies.push(...data.content);
-//   }
-
-//   return Promise.all(
-//     allReplies.map(async (reply) => ({
-//       ...reply,
-//       replies: await loadReplyTree(reply.id),
-//     })),
-//   );
-// }
-
 async function loadReplyTree(commentId: string, depth = 0): Promise<CommentNode[]> {
-  // SAFETY: Prevent infinite loops / Stack Overflow from circular references
   if (depth > 10) return [];
-
   const pageSize = 100;
-  const visited = new Set<string>(); // Prevent fetching the same ID twice
-
+  const visited = new Set<string>();
   const firstPage = await apiFetch<Page<Comment>>(
     `${API_ENDPOINTS.commentReplies(commentId)}?page=0&size=${pageSize}&sortBy=latest`,
   );
-
   const allReplies: Comment[] = [...firstPage.content];
   for (let page = 1; page < firstPage.totalPages; page += 1) {
     const data = await apiFetch<Page<Comment>>(
@@ -207,15 +230,11 @@ async function loadReplyTree(commentId: string, depth = 0): Promise<CommentNode[
     );
     allReplies.push(...data.content);
   }
-
   return Promise.all(
     allReplies.map(async (reply) => {
       if (visited.has(reply.id)) return null;
       visited.add(reply.id);
-      return {
-        ...reply,
-        replies: await loadReplyTree(reply.id, depth + 1),
-      };
+      return {...reply, replies: await loadReplyTree(reply.id, depth + 1)};
     }),
   ).then((results) => results.filter((r): r is CommentNode => r !== null));
 }
@@ -231,40 +250,22 @@ async function loadCommentTree(
   const data = await apiFetch<Page<Comment>>(
     `${API_ENDPOINTS.comments(threadId)}?page=${page}&size=${pageSize}&sortBy=${backendSort}`,
   );
-
-  const tree = data.content.map((comment) => ({
-    ...comment,
-    replies: [],
-  }));
-
+  const tree = data.content.map((comment) => ({...comment, replies: []}));
   return {tree, totalPages: data.totalPages};
 }
 
-function updateAncestorCounts(
-  nodes: CommentNode[],
-  targetId: string,
-  delta: number,
-): CommentNode[] {
+function updateAncestorCounts(nodes: CommentNode[], targetId: string, delta: number): CommentNode[] {
   let changed = false;
   const result = nodes.map((node) => {
     if (node.id === targetId) {
       changed = true;
-      return {
-        ...node,
-        totalReplies: (node.totalReplies ?? node.replyCount) + delta,
-      };
+      return {...node, totalReplies: (node.totalReplies ?? node.replyCount) + delta};
     }
-
     const updatedReplies = updateAncestorCounts(node.replies, targetId, delta);
     if (updatedReplies !== node.replies) {
       changed = true;
-      return {
-        ...node,
-        replies: updatedReplies,
-        totalReplies: (node.totalReplies ?? node.replyCount) + delta,
-      };
+      return {...node, replies: updatedReplies, totalReplies: (node.totalReplies ?? node.replyCount) + delta};
     }
-
     return node;
   });
   return result;
@@ -279,7 +280,7 @@ function countDescendants(nodes: CommentNode[]): number {
   return total;
 }
 
-/* ─── Depth-aware reply node ─── */
+/* ─── Comment handlers interface ─── */
 interface CommentHandlers {
   votedComments: Record<string, "UPVOTE" | "DOWNVOTE">;
   votingComments: Record<string, boolean>;
@@ -305,6 +306,7 @@ interface CommentHandlers {
   canEditComment: (c: Comment) => boolean;
   canDeleteComment: (c: Comment) => boolean;
   isAiComment: (c: Comment) => boolean;
+  threadClosed: boolean;
 }
 
 const MAX_DEPTH = 4;
@@ -319,30 +321,12 @@ function CommentCard({
   handlers: CommentHandlers;
 }) {
   const {
-    votedComments,
-    votingComments,
-    handleVote,
-    expandedReplies,
-    loadingReplies,
-    toggleReplies,
-    replyingTo,
-    setReplyingTo,
-    replyText,
-    setReplyText,
-    submitReply,
-    editingCommentId,
-    editingCommentContent,
-    setEditingCommentContent,
-    startEditingComment,
-    setEditingCommentId,
-    saveComment,
-    savingComment,
-    setCommentDeleteId,
-    isLoggedIn,
-    user,
-    canEditComment,
-    canDeleteComment,
-    isAiComment,
+    votedComments, votingComments, handleVote, expandedReplies, loadingReplies,
+    toggleReplies, replyingTo, setReplyingTo, replyText, setReplyText, submitReply,
+    editingCommentId, editingCommentContent, setEditingCommentContent,
+    startEditingComment, setEditingCommentId, saveComment, savingComment,
+    setCommentDeleteId, isLoggedIn, user, canEditComment, canDeleteComment,
+    isAiComment, threadClosed,
   } = handlers;
 
   const myVote = votedComments[comment.id];
@@ -350,12 +334,10 @@ function CommentCard({
   const aiComment = isAiComment(comment);
   const ownComment = !!user && comment.authorName === user.username;
 
-  // Scale down size at deeper levels
   const avatarSize = depth === 0 ? "h-9 w-9" : "h-7 w-7";
   const voteIconSize = depth === 0 ? "h-3.5 w-3.5" : "h-3 w-3";
   const voteButtonSize = depth === 0 ? "h-7 w-7" : "h-6 w-6";
   const scoreClass = depth === 0 ? "text-sm" : "text-xs";
-  const contentClass = depth === 0 ? "" : "";
   const cardPadding = depth === 0 ? "p-6" : "p-4";
 
   return (
@@ -369,15 +351,11 @@ function CommentCard({
       <div className="flex items-start gap-3">
         {/* Avatar */}
         {aiComment ? (
-          <div
-            className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-500`}
-          >
+          <div className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-500`}>
             <Bot className={depth === 0 ? "h-4 w-4" : "h-3.5 w-3.5"} />
           </div>
         ) : (
-          <div
-            className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-muted-foreground`}
-          >
+          <div className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-muted-foreground`}>
             <UserIcon className={depth === 0 ? "h-4 w-4" : "h-3 w-3"} />
           </div>
         )}
@@ -386,40 +364,34 @@ function CommentCard({
         <div className="flex flex-col items-center gap-1 pt-0.5">
           <button
             onClick={() => handleVote(comment.id, "UPVOTE")}
-            disabled={votingComments[comment.id] || ownComment}
-            title={ownComment ? "Cannot vote your own comment" : "Upvote"}
+            disabled={votingComments[comment.id] || ownComment || threadClosed}
+            title={ownComment ? "Cannot vote your own comment" : threadClosed ? "Thread is closed" : "Upvote"}
             aria-pressed={myVote === "UPVOTE"}
             aria-label="Upvote"
             className={`flex ${voteButtonSize} items-center justify-center rounded-full border transition-colors ${
               myVote === "UPVOTE"
                 ? "border-neon bg-neon/10 text-neon"
                 : "border-border text-muted-foreground hover:border-neon hover:text-neon"
-            } ${ownComment ? "cursor-not-allowed opacity-40" : ""}`}
+            } ${ownComment || threadClosed ? "cursor-not-allowed opacity-40" : ""}`}
           >
             <ThumbsUp className={voteIconSize} />
           </button>
-          <span
-            className={`font-code font-bold ${scoreClass} ${
-              comment.score > 0
-                ? "text-neon"
-                : comment.score < 0
-                  ? "text-destructive"
-                  : "text-muted-foreground"
-            }`}
-          >
+          <span className={`font-code font-bold ${scoreClass} ${
+            comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"
+          }`}>
             {comment.score}
           </span>
           <button
             onClick={() => handleVote(comment.id, "DOWNVOTE")}
-            disabled={votingComments[comment.id] || ownComment}
-            title={ownComment ? "Cannot vote your own comment" : "Downvote"}
+            disabled={votingComments[comment.id] || ownComment || threadClosed}
+            title={ownComment ? "Cannot vote your own comment" : threadClosed ? "Thread is closed" : "Downvote"}
             aria-pressed={myVote === "DOWNVOTE"}
             aria-label="Downvote"
             className={`flex ${voteButtonSize} items-center justify-center rounded-full border transition-colors ${
               myVote === "DOWNVOTE"
                 ? "border-destructive bg-destructive/10 text-destructive"
                 : "border-border text-muted-foreground hover:border-destructive hover:text-destructive"
-            } ${ownComment ? "cursor-not-allowed opacity-40" : ""}`}
+            } ${ownComment || threadClosed ? "cursor-not-allowed opacity-40" : ""}`}
           >
             <ThumbsDown className={voteIconSize} />
           </button>
@@ -427,11 +399,8 @@ function CommentCard({
 
         {/* Body */}
         <div className="min-w-0 flex-1">
-          {/* Header row */}
           <div className="flex flex-wrap items-center gap-1.5 font-code text-[11px]">
-            <span
-              className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}
-            >
+            <span className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}>
               @{comment.authorName}
             </span>
             {aiComment && (
@@ -441,25 +410,21 @@ function CommentCard({
               </span>
             )}
             <span className="text-muted-foreground/40">·</span>
-            <span className="text-muted-foreground">
-              {relativeTime(comment.createdAt)}
-            </span>
+            <span className="text-muted-foreground">{relativeTime(comment.createdAt)}</span>
             {(comment.totalReplies ?? comment.replyCount) > 0 && (
               <span className="text-muted-foreground/60">
                 {comment.totalReplies ?? comment.replyCount} replies
               </span>
             )}
             {comment.parentId && (
-              <span className="rounded bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground">
-                reply
-              </span>
+              <span className="rounded bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground">reply</span>
             )}
             {(canEditComment(comment) || canDeleteComment(comment)) && (
               <span className="ml-auto flex items-center gap-1">
                 {canEditComment(comment) && (
                   <button
                     onClick={() => startEditingComment(comment)}
-                    className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:border-neon hover:text-neon"
+                    className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:border-neon hover:text-neon transition-colors"
                   >
                     Edit
                   </button>
@@ -467,7 +432,7 @@ function CommentCard({
                 {canDeleteComment(comment) && (
                   <button
                     onClick={() => setCommentDeleteId(comment.id)}
-                    className="rounded border border-destructive/30 px-1.5 py-0.5 text-[10px] text-destructive hover:bg-destructive/10"
+                    className="rounded border border-destructive/30 px-1.5 py-0.5 text-[10px] text-destructive hover:bg-destructive/10 transition-colors"
                   >
                     Delete
                   </button>
@@ -483,7 +448,7 @@ function CommentCard({
                 rows={4}
                 value={editingCommentContent}
                 onChange={(e) => setEditingCommentContent(e.target.value)}
-                className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-code text-xs leading-relaxed focus:border-neon focus:outline-none"
+                className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-code text-xs leading-relaxed focus:border-neon focus:outline-none focus:ring-2 focus:ring-neon/20"
               />
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -492,7 +457,7 @@ function CommentCard({
                     setEditingCommentId(null);
                     setEditingCommentContent("");
                   }}
-                  className="rounded-lg border border-border px-3 py-1.5 font-code text-xs text-muted-foreground hover:border-neon hover:text-neon"
+                  className="rounded-lg border border-border px-3 py-1.5 font-code text-xs text-muted-foreground hover:border-neon hover:text-neon transition-colors"
                 >
                   Cancel
                 </button>
@@ -500,42 +465,40 @@ function CommentCard({
                   type="button"
                   onClick={saveComment}
                   disabled={savingComment}
-                  className="rounded-lg bg-primary px-3 py-1.5 font-code text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                  className="rounded-lg bg-primary px-3 py-1.5 font-code text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
                 >
-                  {savingComment ? "Saving…" : "Save"}
+                  {savingComment ? "Saving…" : "Save changes"}
                 </button>
               </div>
             </div>
           ) : (
-            <div className={`mt-1.5 max-w-prose ${contentClass}`}>
+            <div className="mt-1.5 max-w-prose">
               <Markdown content={comment.content} compact={depth > 0} />
             </div>
           )}
 
-          {/* Reply button */}
-          {isLoggedIn && depth < MAX_DEPTH && (
+          {/* Reply button — hidden when thread is closed */}
+          {isLoggedIn && depth < MAX_DEPTH && !threadClosed && (
             <button
-              onClick={() =>
-                setReplyingTo(replyingTo === comment.id ? null : comment.id)
-              }
-              className="mt-1.5 font-code text-[11px] text-muted-foreground hover:text-neon"
+              onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+              className="mt-1.5 font-code text-[11px] text-muted-foreground hover:text-neon transition-colors"
             >
               {replyingTo === comment.id ? "Cancel" : "↳ Reply"}
             </button>
           )}
 
           {/* Inline reply input */}
-          {replyingTo === comment.id && (
+          {replyingTo === comment.id && !threadClosed && (
             <div className="mt-2 flex gap-2">
               <input
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 placeholder="Write a reply…"
-                className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 font-code text-xs focus:border-neon focus:outline-none"
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 font-code text-xs focus:border-neon focus:outline-none focus:ring-2 focus:ring-neon/20 transition-colors"
               />
               <button
                 onClick={() => submitReply(comment.id)}
-                className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground hover:opacity-90"
+                className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground hover:opacity-90 transition-opacity"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>
@@ -556,7 +519,7 @@ function CommentCard({
                   <ChevronDown className="h-3 w-3" />
                 )}
                 {expandedReplies[comment.id]
-                  ? `Hide replies`
+                  ? "Hide replies"
                   : `${comment.totalReplies ?? comment.replyCount} ${(comment.totalReplies ?? comment.replyCount) === 1 ? "reply" : "replies"}`}
               </button>
 
@@ -568,13 +531,9 @@ function CommentCard({
                       Loading replies…
                     </div>
                   ) : comment.replies.length === 0 ? (
-                    <p className="font-code text-[11px] text-muted-foreground">
-                      No replies yet.
-                    </p>
+                    <p className="font-code text-[11px] text-muted-foreground">No replies yet.</p>
                   ) : (
-                    <div
-                      className={`space-y-3 border-l-2 pl-3 ${depth === 0 ? "border-neon/20 ml-1" : "border-border/40 ml-0.5"}`}
-                    >
+                    <div className={`space-y-3 border-l-2 pl-3 ${depth === 0 ? "border-neon/20 ml-1" : "border-border/40 ml-0.5"}`}>
                       {comment.replies.map((reply) => (
                         <CommentCard
                           key={reply.id}
@@ -628,9 +587,7 @@ function QuestionDetail() {
   const [thread, setThread] = useState<Thread | null>(null);
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [commentsPage, setCommentsPage] = useState(0);
-  const [commentSort, setCommentSort] = useState<"latest" | "oldest" | "top">(
-    "latest",
-  );
+  const [commentSort, setCommentSort] = useState<"latest" | "oldest" | "top">("latest");
   const [totalCommentPages, setTotalCommentPages] = useState(1);
   const [loadingThread, setLoadingThread] = useState(true);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -642,18 +599,10 @@ function QuestionDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
-  const [votedComments, setVotedComments] = useState<
-    Record<string, "UPVOTE" | "DOWNVOTE">
-  >({});
-  const [votingComments, setVotingComments] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [expandedReplies, setExpandedReplies] = useState<
-    Record<string, boolean>
-  >({});
-  const [loadingReplies, setLoadingReplies] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [votedComments, setVotedComments] = useState<Record<string, "UPVOTE" | "DOWNVOTE">>({});
+  const [votingComments, setVotingComments] = useState<Record<string, boolean>>({});
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
+  const [loadingReplies, setLoadingReplies] = useState<Record<string, boolean>>({});
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
   const [commentDeleteId, setCommentDeleteId] = useState<string | null>(null);
@@ -668,59 +617,79 @@ function QuestionDetail() {
   const [editTagInput, setEditTagInput] = useState("");
   const [savingThread, setSavingThread] = useState(false);
   const [deletingThread, setDeletingThread] = useState(false);
+  // Quick "Mark as Resolved / Re-open" confirmation state
+  const [markingStatus, setMarkingStatus] = useState(false);
 
   const role = user?.role?.toUpperCase();
   const isPrivileged = role === "ADMIN" || role === "MODERATOR";
   const isThreadOwner = !!user && thread?.authorName === user.username;
   const canEditThread = isLoggedIn && isThreadOwner;
   const canDeleteThread = isLoggedIn && (isThreadOwner || isPrivileged);
+  const threadClosed = thread?.status === "CLOSED";
+  const threadPending = thread?.status === "PENDING";
+
+  // What status options the current user can choose in the edit dialog
+  const availableStatusOptions = isPrivileged
+    ? getModStatusOptions()
+    : isThreadOwner && thread
+    ? getAuthorStatusOptions(thread.status)
+    : [];
 
   const canEditComment = (comment: Comment) =>
     isLoggedIn && !!user && comment.authorName === user.username;
   const canDeleteComment = (comment: Comment) =>
-    isLoggedIn &&
-    !!user &&
-    (comment.authorName === user.username || isPrivileged);
+    isLoggedIn && !!user && (comment.authorName === user.username || isPrivileged);
   const isAiComment = (comment: Comment) =>
     comment.authorName === TECHFORUM_AI_USERNAME;
 
+  // ── Quick status toggle (author only: OPEN ↔ RESOLVED) ──────────────────
+  const quickMarkStatus = async (nextStatus: ThreadStatus) => {
+    if (!thread || !canEditThread) return;
+    setMarkingStatus(true);
+    try {
+      const updated = await apiFetch<Thread>(API_ENDPOINTS.threadById(id), {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: thread.title,
+          body: thread.body,
+          status: nextStatus,
+          tags: thread.tags.map((t) => ({name: t.name})),
+        }),
+      });
+      setThread(updated);
+      toast.success(
+        nextStatus === "RESOLVED"
+          ? "Question marked as resolved."
+          : "Question reopened.",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
+    } finally {
+      setMarkingStatus(false);
+    }
+  };
+
   const toggleReplies = async (comment: CommentNode) => {
     const nextExpanded = !(expandedReplies[comment.id] ?? false);
-    setExpandedReplies((current) => ({
-      ...current,
-      [comment.id]: nextExpanded,
-    }));
-
+    setExpandedReplies((current) => ({...current, [comment.id]: nextExpanded}));
     if (
       !nextExpanded ||
       (comment.totalReplies ?? comment.replyCount) === 0 ||
       comment.replies.length > 0
-    )
-      return;
-
+    ) return;
     setLoadingReplies((current) => ({...current, [comment.id]: true}));
     try {
       const replies = await loadReplyTree(comment.id);
       const replyVotes = buildVoteMap(replies);
       const totalReplies = countDescendants(replies);
-
-      // NEW: Handle AI comment separately since it lives outside the comments tree
       if (aiComment && aiComment.id === comment.id) {
         setAiComment((current) => {
           if (!current) return null;
-          return {
-            ...current,
-            replies,
-            totalReplies,
-          };
+          return {...current, replies, totalReplies};
         });
       } else {
         setComments((current) =>
-          updateCommentTree(current, comment.id, (node) => ({
-            ...node,
-            replies,
-            totalReplies: totalReplies,
-          })),
+          updateCommentTree(current, comment.id, (node) => ({...node, replies, totalReplies})),
         );
       }
       setVotedComments((current) => ({...current, ...replyVotes}));
@@ -734,7 +703,7 @@ function QuestionDetail() {
   const openEditDialog = () => {
     if (!thread) return;
     setEditTitle(thread.title);
-    setEditBody(thread.body);
+    setEditBody(decodeQuotedLiteral(thread.body).replace(/\\n/g, "\n"));
     setEditStatus(thread.status);
     setEditTags(thread.tags?.map((tag) => tag.name) ?? []);
     setEditTagInput("");
@@ -813,26 +782,18 @@ function QuestionDetail() {
     try {
       const updated = await apiFetch<Comment>(
         API_ENDPOINTS.commentById(editingCommentId),
-        {
-          method: "PATCH",
-          //   body: JSON.stringify(trimmed),
-          body: JSON.stringify({content: trimmed}),
-        },
+        {method: "PATCH", body: JSON.stringify({content: trimmed})},
       );
       setComments((prev) =>
         updateCommentTree(prev, editingCommentId, (comment) => ({
-          ...comment,
-          ...updated,
-          replies: comment.replies,
+          ...comment, ...updated, replies: comment.replies,
         })),
       );
       setEditingCommentId(null);
       setEditingCommentContent("");
       toast.success("Comment updated");
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to update comment",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to update comment");
     } finally {
       setSavingComment(false);
     }
@@ -842,22 +803,20 @@ function QuestionDetail() {
     if (!commentDeleteId) return;
     setDeletingComment(true);
     try {
-      const res = await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), { method: "DELETE" });
-
-      // ONLY update UI if backend actually returned success
+      const res = await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), {method: "DELETE"});
       if (res === null || res.ok) {
-          const nodeToDelete = findCommentNode(comments, commentDeleteId);
-          const removedCount = nodeToDelete ? 1 + countDescendants(nodeToDelete.replies) : 1;
-          setComments((prev) => {
-              const removed = removeCommentFromTree(prev, commentDeleteId);
-              return updateAncestorCounts(removed, commentDeleteId, -removedCount);
-          });
-          if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments - removedCount}));
+        const nodeToDelete = findCommentNode(comments, commentDeleteId);
+        const removedCount = nodeToDelete ? 1 + countDescendants(nodeToDelete.replies) : 1;
+        setComments((prev) => {
+          const removed = removeCommentFromTree(prev, commentDeleteId);
+          return updateAncestorCounts(removed, commentDeleteId, -removedCount);
+        });
+        if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments - removedCount}));
       }
       toast.success("Comment deleted");
       setCommentDeleteId(null);
     } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to delete comment");
+      toast.error(err instanceof Error ? err.message : "Failed to delete comment");
     } finally {
       setDeletingComment(false);
     }
@@ -869,27 +828,15 @@ function QuestionDetail() {
       if (!silent) setLoadingComments(true);
       try {
         const data = await loadCommentTree(id, commentsPage, commentSort);
-        const {nodes: newTopLevelNodes, aiComment: nextAiComment} =
-          extractAiComment(data.tree);
-
-        // SMART MERGE: Preserve nested replies that were already loaded
+        const {nodes: newTopLevelNodes, aiComment: nextAiComment} = extractAiComment(data.tree);
         setComments((prevComments) => {
           return newTopLevelNodes.map((newNode) => {
             const existingNode = prevComments.find((n) => n.id === newNode.id);
-
             if (existingNode && existingNode.replies.length > 0) {
               const backendCount = newNode.totalReplies ?? newNode.replyCount;
-
-              // CRITICAL FIX: If the backend count is LESS than our loaded count,
-              // it means a reply was deleted! Discard the cached replies.
               if (backendCount < existingNode.replies.length) {
-                return {
-                  ...newNode,
-                  replies: [], // Wipe the cache so deleted comments don't reappear
-                  totalReplies: backendCount
-                };
+                return {...newNode, replies: [], totalReplies: backendCount};
               }
-
               return {
                 ...newNode,
                 replies: existingNode.replies,
@@ -899,26 +846,13 @@ function QuestionDetail() {
             return newNode;
           });
         });
-
-        // setAiComment(nextAiComment);
-        // Inside reloadComments, replace:
-// setAiComment(nextAiComment);
-// With:
         setAiComment((prevAiComment) => {
           if (!prevAiComment || !nextAiComment) return nextAiComment;
           if (prevAiComment.id !== nextAiComment.id) return nextAiComment;
-
           const backendCount = nextAiComment.totalReplies ?? nextAiComment.replyCount;
-
-          // If backend count dropped, a reply was deleted — wipe cache
           if (backendCount < prevAiComment.replies.length) {
-            return {
-              ...nextAiComment,
-              replies: [],
-              totalReplies: backendCount,
-            };
+            return {...nextAiComment, replies: [], totalReplies: backendCount};
           }
-
           return {
             ...nextAiComment,
             replies: prevAiComment.replies,
@@ -945,26 +879,17 @@ function QuestionDetail() {
     let pollInFlight = false;
 
     const stopPolling = () => {
-      if (pollingInterval !== null) {
-        window.clearInterval(pollingInterval);
-        pollingInterval = null;
-      }
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
+      if (pollingInterval !== null) { window.clearInterval(pollingInterval); pollingInterval = null; }
+      if (timeoutId !== null) { window.clearTimeout(timeoutId); timeoutId = null; }
     };
 
     const startPolling = async () => {
       setAiComment(null);
       setPollingTimedOut(false);
       setPollingForAiComment(false);
-
       const foundAiOnFirstLoad = await reloadComments();
       if (cancelled || foundAiOnFirstLoad) return;
-
       setPollingForAiComment(true);
-
       pollingInterval = window.setInterval(async () => {
         if (cancelled) return;
         if (pollInFlight) return;
@@ -975,7 +900,6 @@ function QuestionDetail() {
         setPollingForAiComment(false);
         stopPolling();
       }, 3000);
-
       timeoutId = window.setTimeout(() => {
         if (cancelled) return;
         setPollingForAiComment(false);
@@ -985,30 +909,9 @@ function QuestionDetail() {
     };
 
     void startPolling();
-
-    return () => {
-      cancelled = true;
-      stopPolling();
-    };
+    return () => { cancelled = true; stopPolling(); };
   }, [id, commentsPage, commentSort, reloadComments]);
 
-  // OLD:
-  // useEffect(() => {
-  //     const load = async () => {
-  //         setLoadingThread(true);
-  //         try {
-  //             if (author) {
-  //                 setThread(await apiFetch<Thread>(API_ENDPOINTS.threadExpand(author, id)));
-  //                 return;
-  //             }
-  //             const searchPage = await apiFetch<Page<Thread>>(...);
-  //             ... (all that pagination logic)
-  //         }
-  //     };
-  //     load();
-  // }, [id, author]);
-
-  // NEW:
   useEffect(() => {
     const load = async () => {
       setLoadingThread(true);
@@ -1019,13 +922,7 @@ function QuestionDetail() {
         } else {
           threadData = await apiFetch<Thread>(API_ENDPOINTS.threadById(id));
         }
-
-        // SAFETY CHECK: Ensure arrays and strings are never null to prevent React crashes
-        setThread({
-          ...threadData,
-          body: threadData.body ?? "",
-          tags: threadData.tags ?? [],
-        });
+        setThread({...threadData, body: threadData.body ?? "", tags: threadData.tags ?? []});
       } catch {
         toast.error("Failed to load thread");
       } finally {
@@ -1059,27 +956,18 @@ function QuestionDetail() {
       }
     };
     loadBookmarks();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [id, isLoggedIn]);
 
   const handleBookmark = async () => {
-    if (!isLoggedIn) {
-      toast.error("Please log in to bookmark");
-      return;
-    }
+    if (!isLoggedIn) { toast.error("Please log in to bookmark"); return; }
     try {
       if (bookmarked) {
-        await apiFetch(API_ENDPOINTS.bookmarkThread(id), {
-          method: "DELETE",
-        });
+        await apiFetch(API_ENDPOINTS.bookmarkThread(id), {method: "DELETE"});
         setBookmarked(false);
         toast.success("Bookmark removed");
       } else {
-        await apiFetch(API_ENDPOINTS.bookmarkThread(id), {
-          method: "POST",
-        });
+        await apiFetch(API_ENDPOINTS.bookmarkThread(id), {method: "POST"});
         setBookmarked(true);
         toast.success("Bookmarked!");
       }
@@ -1089,55 +977,32 @@ function QuestionDetail() {
   };
 
   const submitComment = async () => {
-    if (!isLoggedIn) {
-      toast.error("Please log in to comment");
-      return;
-    }
-    if (newComment.trim().length < 5) {
-      toast.error("Comment too short");
-      return;
-    }
-    // optimistic top-level comment: insert locally before server response
+    if (!isLoggedIn) { toast.error("Please log in to comment"); return; }
+    if (newComment.trim().length < 5) { toast.error("Comment too short"); return; }
     const tempId =
       typeof globalThis.crypto?.randomUUID === "function"
         ? globalThis.crypto.randomUUID()
         : `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tempComment: CommentNode = {
-      id: tempId,
-      parentId: null,
-      threadId: id,
-      authorName: user?.username ?? "You",
-      content: newComment.trim(),
-      replyCount: 0,
-      totalReplies: 0,
-      score: 0,
-      createdAt: new Date().toISOString(),
-      replies: [],
+      id: tempId, parentId: null, threadId: id,
+      authorName: user?.username ?? "You", content: newComment.trim(),
+      replyCount: 0, totalReplies: 0, score: 0,
+      createdAt: new Date().toISOString(), replies: [],
     };
-
     const prevComments = comments;
     const prevThread = thread;
     setComments((cur) => [tempComment, ...cur]);
-    if (thread)
-      setThread((t) => ({
-        ...(t as Thread),
-        numberComments: t.numberComments + 1,
-      }));
+    if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments + 1}));
     setNewComment("");
     setSubmitting(true);
     try {
       await apiFetch<Comment>(API_ENDPOINTS.commentsBase, {
         method: "POST",
-        body: JSON.stringify({
-          threadId: id,
-          content: tempComment.content,
-          parentId: null,
-        }),
+        body: JSON.stringify({threadId: id, content: tempComment.content, parentId: null}),
       });
       toast.success("Comment posted");
       await reloadComments();
     } catch (err) {
-      // rollback optimistic update
       setComments(prevComments);
       if (prevThread) setThread(prevThread);
       setNewComment(tempComment.content);
@@ -1148,39 +1013,22 @@ function QuestionDetail() {
   };
 
   const submitReply = async (parentId: string) => {
-    if (!isLoggedIn) {
-      toast.error("Please log in");
-      return;
-    }
-    if (replyText.trim().length < 5) {
-      toast.error("Reply too short");
-      return;
-    }
-    // optimistic increment of ancestor reply counts and thread comment count
+    if (!isLoggedIn) { toast.error("Please log in"); return; }
+    if (replyText.trim().length < 5) { toast.error("Reply too short"); return; }
     const prevComments = comments;
     const prevThread = thread;
     setComments((cur) => updateAncestorCounts(cur, parentId, 1));
-    if (thread)
-      setThread((t) => ({
-        ...(t as Thread),
-        numberComments: t.numberComments + 1,
-      }));
-
+    if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments + 1}));
     try {
       await apiFetch<Comment>(API_ENDPOINTS.commentsBase, {
         method: "POST",
-        body: JSON.stringify({
-          threadId: id,
-          content: replyText.trim(),
-          parentId,
-        }),
+        body: JSON.stringify({threadId: id, content: replyText.trim(), parentId}),
       });
       setReplyingTo(null);
       setReplyText("");
       toast.success("Reply posted");
       await reloadComments();
     } catch (err) {
-      // rollback optimistic update
       setComments(prevComments);
       if (prevThread) setThread(prevThread);
       toast.error(err instanceof Error ? err.message : "Failed");
@@ -1190,56 +1038,28 @@ function QuestionDetail() {
   const handleVote = async (commentId: string, type: "UPVOTE" | "DOWNVOTE") => {
     const updateAiCommentScore = (delta: number) => {
       setAiComment((current: CommentNode | null) =>
-        current && current.id === commentId
-          ? {...current, score: current.score + delta}
-          : current,
+        current && current.id === commentId ? {...current, score: current.score + delta} : current,
       );
     };
-
-    if (!isLoggedIn) {
-      toast.error("Please log in to vote");
-      return;
-    }
+    if (!isLoggedIn) { toast.error("Please log in to vote"); return; }
     if (votingComments[commentId]) return;
-
     const target = findCommentNode(comments, commentId);
     if (target && user && target.authorName === user.username) {
       toast.error("You cannot vote your own comment");
       return;
     }
-
     const prev = votedComments[commentId] ?? null;
     setVotingComments((current) => ({...current, [commentId]: true}));
-
     if (prev === type) {
       const revertDelta = type === "UPVOTE" ? -1 : 1;
-
-      setVotedComments((current) => {
-        const c = {...current};
-        delete c[commentId];
-        return c;
-      });
-      setComments((current) =>
-        updateCommentTree(current, commentId, (c) => ({
-          ...c,
-          score: c.score + revertDelta,
-        })),
-      );
+      setVotedComments((current) => { const c = {...current}; delete c[commentId]; return c; });
+      setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score + revertDelta})));
       updateAiCommentScore(revertDelta);
-
       try {
-        await apiFetch(API_ENDPOINTS.voteComment(commentId), {
-          method: "POST",
-          body: JSON.stringify({type}),
-        });
+        await apiFetch(API_ENDPOINTS.voteComment(commentId), {method: "POST", body: JSON.stringify({type})});
       } catch (err) {
         setVotedComments((current) => ({...current, [commentId]: prev}));
-        setComments((current) =>
-          updateCommentTree(current, commentId, (c) => ({
-            ...c,
-            score: c.score - revertDelta,
-          })),
-        );
+        setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score - revertDelta})));
         updateAiCommentScore(-revertDelta);
         toast.error(err instanceof Error ? err.message : "Vote failed");
       } finally {
@@ -1247,42 +1067,21 @@ function QuestionDetail() {
       }
       return;
     }
-
-    const oldContribution =
-      prev === "UPVOTE" ? 1 : prev === "DOWNVOTE" ? -1 : 0;
+    const oldContribution = prev === "UPVOTE" ? 1 : prev === "DOWNVOTE" ? -1 : 0;
     const newContribution = type === "UPVOTE" ? 1 : -1;
     const delta = newContribution - oldContribution;
-
     setVotedComments((current) => ({...current, [commentId]: type}));
-    setComments((current) =>
-      updateCommentTree(current, commentId, (c) => ({
-        ...c,
-        score: c.score + delta,
-      })),
-    );
+    setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score + delta})));
     updateAiCommentScore(delta);
-
     try {
-      await apiFetch(API_ENDPOINTS.voteComment(commentId), {
-        method: "POST",
-        body: JSON.stringify({type}),
-      });
+      await apiFetch(API_ENDPOINTS.voteComment(commentId), {method: "POST", body: JSON.stringify({type})});
     } catch (err) {
       if (prev === null) {
-        setVotedComments((current) => {
-          const c = {...current};
-          delete c[commentId];
-          return c;
-        });
+        setVotedComments((current) => { const c = {...current}; delete c[commentId]; return c; });
       } else {
         setVotedComments((current) => ({...current, [commentId]: prev}));
       }
-      setComments((current) =>
-        updateCommentTree(current, commentId, (c) => ({
-          ...c,
-          score: c.score - delta,
-        })),
-      );
+      setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score - delta})));
       updateAiCommentScore(-delta);
       toast.error(err instanceof Error ? err.message : "Vote failed");
     } finally {
@@ -1291,30 +1090,11 @@ function QuestionDetail() {
   };
 
   const commentHandlers: CommentHandlers = {
-    votedComments,
-    votingComments,
-    handleVote,
-    expandedReplies,
-    loadingReplies,
-    toggleReplies,
-    replyingTo,
-    setReplyingTo,
-    replyText,
-    setReplyText,
-    submitReply,
-    editingCommentId,
-    editingCommentContent,
-    setEditingCommentContent,
-    startEditingComment,
-    setEditingCommentId,
-    saveComment,
-    savingComment,
-    setCommentDeleteId,
-    isLoggedIn,
-    user,
-    canEditComment,
-    canDeleteComment,
-    isAiComment,
+    votedComments, votingComments, handleVote, expandedReplies, loadingReplies,
+    toggleReplies, replyingTo, setReplyingTo, replyText, setReplyText, submitReply,
+    editingCommentId, editingCommentContent, setEditingCommentContent, startEditingComment,
+    setEditingCommentId, saveComment, savingComment, setCommentDeleteId, isLoggedIn, user,
+    canEditComment, canDeleteComment, isAiComment, threadClosed,
   };
 
   const showAiSkeleton = pollingForAiComment && !aiComment && !pollingTimedOut;
@@ -1324,9 +1104,7 @@ function QuestionDetail() {
       <div className="flex items-center justify-center py-32">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-neon" />
-          <span className="font-code text-xs text-muted-foreground">
-            Loading thread…
-          </span>
+          <span className="font-code text-xs text-muted-foreground">Loading thread…</span>
         </div>
       </div>
     );
@@ -1336,22 +1114,23 @@ function QuestionDetail() {
     return (
       <div className="py-20 text-center font-code text-sm text-muted-foreground">
         Thread not found.{" "}
-        <Link to="/" className="text-neon hover:underline">
-          ← Back to feed
-        </Link>
+        <Link to="/" className="text-neon hover:underline">← Back to feed</Link>
       </div>
     );
   }
 
+  // ── Which quick-action to show the author ────────────────────────────────
+  const authorActions = isThreadOwner ? getAuthorStatusOptions(thread.status) : [];
+
   return (
     <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_360px]">
       <section className="min-w-0 space-y-6">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 font-code text-xs text-muted-foreground hover:text-neon"
-        >
+        <Link to="/" className="inline-flex items-center gap-1.5 font-code text-xs text-muted-foreground hover:text-neon transition-colors">
           <ArrowLeft className="h-3 w-3" /> Back to feed
         </Link>
+
+        {/* Status banners */}
+        <StatusBanner status={thread.status} />
 
         {/* Thread card */}
         <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
@@ -1370,27 +1149,61 @@ function QuestionDetail() {
             ))}
           </div>
 
-          <h1 className="mt-6 text-xl font-bold leading-snug text-foreground sm:text-2xl">
+          <h1 className="mt-6 font-heading text-xl font-bold leading-snug tracking-tight text-foreground sm:text-2xl lg:text-3xl">
             {thread.title}
           </h1>
 
-          <div className="mt-6 prose prose-sm dark:prose-invert max-w-none">
-            <Markdown content={thread.body} />
+          <div className="mt-6">
+            <Markdown content={thread.body} reading />
           </div>
 
+          {/* Footer: meta + actions */}
           <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-border pt-5 font-code text-sm">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <UserIcon className="h-3 w-3" />
-              <span className="text-neon font-medium">
-                @{thread.authorName}
-              </span>
+              <span className="text-neon font-medium">@{thread.authorName}</span>
             </div>
             <span className="text-muted-foreground/40">·</span>
             <div className="flex items-center gap-1 text-muted-foreground">
               <Clock className="h-3 w-3" />
               <span>{relativeTime(thread.createdAt)}</span>
             </div>
+
             <div className="ml-auto flex flex-wrap items-center gap-2">
+              {/* ── Author quick-action: Mark Resolved / Re-open ── */}
+              {isThreadOwner && authorActions.length > 0 && (
+                authorActions.map(({value, label}) => (
+                  <button
+                    key={value}
+                    onClick={() => quickMarkStatus(value)}
+                    disabled={markingStatus}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
+                      value === "RESOLVED"
+                        ? "border-green-500/40 text-green-500 hover:bg-green-500/10"
+                        : "border-amber-500/40 text-amber-500 hover:bg-amber-500/10"
+                    }`}
+                  >
+                    {markingStatus ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : value === "RESOLVED" ? (
+                      <CheckCircle2 className="h-3 w-3" />
+                    ) : (
+                      <ArrowLeft className="h-3 w-3 rotate-90" />
+                    )}
+                    {markingStatus ? "Updating…" : label.split(" — ")[0]}
+                  </button>
+                ))
+              )}
+
+              {/* ── Mod indicator (no quick-action; use Edit dialog) ── */}
+              {isPrivileged && (
+                <span className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-500">
+                  <ShieldCheck className="h-3 w-3" />
+                  Mod view
+                </span>
+              )}
+
+              {/* Edit (author only; mod uses separate moderation tools) */}
               {canEditThread && (
                 <button
                   onClick={openEditDialog}
@@ -1399,6 +1212,7 @@ function QuestionDetail() {
                   <Pencil className="h-3 w-3" /> Edit
                 </button>
               )}
+
               {canDeleteThread && (
                 <button
                   onClick={() => setDeleteOpen(true)}
@@ -1407,6 +1221,7 @@ function QuestionDetail() {
                   <Trash2 className="h-3 w-3" /> Delete
                 </button>
               )}
+
               <button
                 onClick={handleBookmark}
                 className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-all ${
@@ -1418,6 +1233,7 @@ function QuestionDetail() {
                 <Bookmark className="h-3 w-3" />
                 {bookmarked ? "Saved" : "Bookmark"}
               </button>
+
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(window.location.href);
@@ -1431,7 +1247,7 @@ function QuestionDetail() {
           </div>
         </div>
 
-        {/* Edit + Delete dialogs */}
+        {/* ── Edit dialog ─────────────────────────────────────────────────── */}
         <Dialog
           open={editOpen}
           onOpenChange={(open) => {
@@ -1443,69 +1259,110 @@ function QuestionDetail() {
             <DialogHeader>
               <DialogTitle>Edit post</DialogTitle>
               <DialogDescription>
-                Update the title, body, status, and tags for this thread.
+                Update the title, body, and tags for your question.
               </DialogDescription>
             </DialogHeader>
+
             <div className="space-y-5">
+              {/* Title */}
               <div>
-                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
-                  title
+                <label htmlFor="edit-title" className="mb-1.5 block font-code text-sm font-medium text-foreground">
+                  Title
                 </label>
                 <input
+                  id="edit-title"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-4 py-2.5 font-code text-sm focus:border-neon focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 font-code text-sm focus:border-neon focus:outline-none focus:ring-2 focus:ring-neon/20 transition-colors"
                 />
               </div>
+
+              {/* Body */}
               <div>
-                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
-                  body
+                <label htmlFor="edit-body" className="mb-1.5 block font-code text-sm font-medium text-foreground">
+                  Body
                 </label>
                 <textarea
+                  id="edit-body"
                   rows={10}
                   value={editBody}
                   onChange={(e) => setEditBody(e.target.value)}
-                  className="w-full resize-y rounded-lg border border-border bg-background px-4 py-2.5 font-code text-sm leading-relaxed focus:border-neon focus:outline-none"
+                  className="w-full resize-y rounded-lg border border-border bg-background px-4 py-3 font-code text-sm leading-relaxed focus:border-neon focus:outline-none focus:ring-2 focus:ring-neon/20 transition-colors"
                 />
               </div>
+
+              {/* Status — role-gated ───────────────────────────────────────
+                  Authors: can only toggle OPEN ↔ RESOLVED
+                  Mods/Admins: full control
+                  PENDING / CLOSED author: read-only status display
+              ───────────────────────────────────────────────────────────── */}
               <div>
-                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
-                  status
+                <label className="mb-1.5 block font-code text-sm font-medium text-foreground">
+                  Status
                 </label>
-                <Select
-                  value={editStatus}
-                  onValueChange={(value) =>
-                    setEditStatus(value as ThreadStatus)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="OPEN">Open</SelectItem>
-                    <SelectItem value="RESOLVED">Resolved</SelectItem>
-                    <SelectItem value="CLOSED">Closed</SelectItem>
-                    <SelectItem value="PENDING">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
+
+                {availableStatusOptions.length > 0 ? (
+                  <>
+                    <Select
+                      value={editStatus}
+                      onValueChange={(value) => setEditStatus(value as ThreadStatus)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* Always show current status as first option */}
+                        <SelectItem value={thread.status}>
+                          {thread.status.charAt(0) + thread.status.slice(1).toLowerCase()} (current)
+                        </SelectItem>
+                        {availableStatusOptions
+                          .filter((opt) => opt.value !== thread.status)
+                          .map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {!isPrivileged && (
+                      <p className="mt-1.5 flex items-center gap-1.5 font-code text-xs text-muted-foreground">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        You can only mark your question as resolved or reopen it.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  /* PENDING or CLOSED — author cannot change status */
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-4 py-2.5">
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="font-code text-sm text-muted-foreground">
+                      {thread.status === "PENDING"
+                        ? "Status is set by moderators after review."
+                        : "This thread is closed and cannot be reopened by its author."}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {/* Tags */}
               <div>
-                <label className="mb-1.5 block font-code text-xs text-muted-foreground">
-                  tags
+                <label className="mb-1.5 block font-code text-sm font-medium text-foreground">
+                  Tags
                 </label>
-                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background p-2">
+                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background p-2 focus-within:border-neon focus-within:ring-2 focus-within:ring-neon/20 transition-colors">
                   {editTags.map((tag) => (
                     <span
                       key={tag}
-                      className="flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 font-code text-[11px] text-neon"
+                      className="flex items-center gap-1 rounded-md border border-neon/30 bg-neon/10 px-2 py-0.5 font-code text-xs text-neon"
                     >
                       {tag}
                       <button
                         type="button"
                         onClick={() => removeEditTag(tag)}
-                        className="hover:text-destructive"
+                        aria-label={`Remove tag ${tag}`}
+                        className="hover:text-destructive transition-colors"
                       >
-                        <span className="sr-only">Remove tag</span>×
+                        <X className="h-3 w-3" />
                       </button>
                     </span>
                   ))}
@@ -1517,18 +1374,22 @@ function QuestionDetail() {
                         e.preventDefault();
                         addEditTag();
                       }
+                      if (e.key === "Backspace" && !editTagInput && editTags.length > 0) {
+                        removeEditTag(editTags[editTags.length - 1]);
+                      }
                     }}
-                    placeholder="add tag and press Enter…"
-                    className="min-w-35 flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none"
+                    placeholder={editTags.length === 0 ? "Type a tag and press Enter…" : ""}
+                    className="min-w-32 flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none"
                   />
                 </div>
               </div>
             </div>
+
             <DialogFooter>
               <button
                 type="button"
                 onClick={() => setEditOpen(false)}
-                className="rounded-lg border border-border px-4 py-2 font-code text-sm text-muted-foreground hover:border-neon hover:text-neon"
+                className="rounded-lg border border-border px-4 py-2.5 font-code text-sm text-muted-foreground hover:border-neon hover:text-neon transition-colors"
               >
                 Cancel
               </button>
@@ -1536,7 +1397,7 @@ function QuestionDetail() {
                 type="button"
                 onClick={saveThread}
                 disabled={savingThread}
-                className="rounded-lg bg-primary px-4 py-2 font-code text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-primary px-4 py-2.5 font-code text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
               >
                 {savingThread ? "Saving…" : "Save changes"}
               </button>
@@ -1544,18 +1405,17 @@ function QuestionDetail() {
           </DialogContent>
         </Dialog>
 
+        {/* ── Delete confirmation dialog ─── */}
         <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this post?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently remove the thread and all of its comments.
+                This will permanently remove the thread and all of its comments. This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={deletingThread}>
-                Cancel
-              </AlertDialogCancel>
+              <AlertDialogCancel disabled={deletingThread}>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 disabled={deletingThread}
                 onClick={(event) => {
@@ -1570,7 +1430,7 @@ function QuestionDetail() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Comments section */}
+        {/* ── Comments section ─── */}
         <div>
           <div className="mb-3 flex items-start justify-between gap-4">
             <h2 className="flex items-center gap-2 font-code text-sm font-semibold text-foreground">
@@ -1615,24 +1475,14 @@ function QuestionDetail() {
                     <Sparkles className="h-3 w-3" />
                     TechForum AI answer
                   </div>
-                  <CommentCard
-                    key={aiComment.id}
-                    comment={aiComment}
-                    depth={0}
-                    handlers={commentHandlers}
-                  />
+                  <CommentCard key={aiComment.id} comment={aiComment} depth={0} handlers={commentHandlers} />
                 </div>
               ) : showAiSkeleton ? (
                 <AiCommentSkeleton />
               ) : null}
 
               {comments.map((comment) => (
-                <CommentCard
-                  key={comment.id}
-                  comment={comment}
-                  depth={0}
-                  handlers={commentHandlers}
-                />
+                <CommentCard key={comment.id} comment={comment} depth={0} handlers={commentHandlers} />
               ))}
             </div>
           )}
@@ -1640,9 +1490,7 @@ function QuestionDetail() {
           {/* Comment delete dialog */}
           <AlertDialog
             open={commentDeleteId !== null}
-            onOpenChange={(open) => {
-              if (!open) setCommentDeleteId(null);
-            }}
+            onOpenChange={(open) => { if (!open) setCommentDeleteId(null); }}
           >
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -1652,9 +1500,7 @@ function QuestionDetail() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={deletingComment}>
-                  Cancel
-                </AlertDialogCancel>
+                <AlertDialogCancel disabled={deletingComment}>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   disabled={deletingComment}
                   onClick={(event) => {
@@ -1675,48 +1521,49 @@ function QuestionDetail() {
               <button
                 disabled={commentsPage === 0}
                 onClick={() => setCommentsPage((p) => p - 1)}
-                className="rounded-lg border border-border px-4 py-1.5 disabled:opacity-40 hover:border-neon"
+                className="rounded-lg border border-border px-4 py-1.5 disabled:opacity-40 hover:border-neon transition-colors"
               >
                 ← Prev
               </button>
-              <span className="text-muted-foreground">
-                {commentsPage + 1} / {totalCommentPages}
-              </span>
+              <span className="text-muted-foreground">{commentsPage + 1} / {totalCommentPages}</span>
               <button
                 disabled={commentsPage >= totalCommentPages - 1}
                 onClick={() => setCommentsPage((p) => p + 1)}
-                className="rounded-lg border border-border px-4 py-1.5 disabled:opacity-40 hover:border-neon"
+                className="rounded-lg border border-border px-4 py-1.5 disabled:opacity-40 hover:border-neon transition-colors"
               >
                 Next →
               </button>
             </div>
           )}
 
-          {/* Add comment */}
+          {/* Add comment — hidden when CLOSED */}
           <div className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h3 className="mb-3 font-code text-sm font-semibold text-foreground">
               {isLoggedIn ? `Comment as @${user?.username}` : "Add a comment"}
             </h3>
-            {isLoggedIn ? (
+            {threadClosed ? (
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-4 py-3 font-code text-xs text-muted-foreground">
+                <Lock className="h-3.5 w-3.5 shrink-0" />
+                This thread is closed. Commenting is disabled.
+              </div>
+            ) : isLoggedIn ? (
               <>
                 <textarea
                   rows={4}
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder="Share your thoughts, solution, or follow-up question…"
-                  className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 font-code text-sm leading-relaxed focus:border-neon focus:outline-none focus:ring-2 focus:ring-neon/10"
+                  className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 font-code text-sm leading-relaxed focus:border-neon focus:outline-none focus:ring-2 focus:ring-neon/10 transition-colors"
                 />
                 <div className="mt-3 flex items-center justify-between">
                   <span className="font-code text-[11px] text-muted-foreground">
                     {newComment.length} chars{" "}
-                    {newComment.length < 5 &&
-                      newComment.length > 0 &&
-                      "· min 5"}
+                    {newComment.length < 5 && newComment.length > 0 && "· min 5"}
                   </span>
                   <button
                     onClick={submitComment}
                     disabled={submitting || newComment.trim().length < 5}
-                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-40"
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-code text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-40 transition-all"
                   >
                     <Send className="h-3.5 w-3.5" />
                     {submitting ? "Posting…" : "Post comment"}
@@ -1725,9 +1572,7 @@ function QuestionDetail() {
               </>
             ) : (
               <p className="font-code text-xs text-muted-foreground">
-                <Link to="/login" className="text-neon hover:underline">
-                  Log in
-                </Link>{" "}
+                <Link to="/login" className="text-neon hover:underline">Log in</Link>{" "}
                 to post a comment.
               </p>
             )}
@@ -1735,50 +1580,38 @@ function QuestionDetail() {
         </div>
       </section>
 
-      {/* Sidebar */}
+      {/* ── Sidebar ─── */}
       <aside className="space-y-4">
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <h3 className="mb-3 font-code text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          <h3 className="mb-3 font-code text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Thread Info
           </h3>
           <dl className="space-y-3 font-code text-xs">
             <div>
-              <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                Status
-              </dt>
-              <dd className="mt-1">
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Status</dt>
+              <dd className="mt-1 flex items-center gap-2">
                 <StatusBadge status={thread.status} />
+                {/* Inline hint for PENDING so the author understands what happens next */}
+                {threadPending && isThreadOwner && (
+                  <span className="text-[10px] text-amber-500">awaiting mod review</span>
+                )}
               </dd>
             </div>
             <div>
-              <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                Author
-              </dt>
-              <dd className="mt-1 font-medium text-neon">
-                @{thread.authorName}
-              </dd>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Author</dt>
+              <dd className="mt-1 font-medium text-neon">@{thread.authorName}</dd>
             </div>
             <div>
-              <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                Posted
-              </dt>
-              <dd className="mt-1 text-muted-foreground">
-                {relativeTime(thread.createdAt)}
-              </dd>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Posted</dt>
+              <dd className="mt-1 text-muted-foreground">{relativeTime(thread.createdAt)}</dd>
             </div>
             <div>
-              <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                Comments
-              </dt>
-              <dd className="mt-1 text-muted-foreground">
-                {thread.numberComments}
-              </dd>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Comments</dt>
+              <dd className="mt-1 text-muted-foreground">{thread.numberComments}</dd>
             </div>
             {thread.tags?.length > 0 && (
               <div>
-                <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                  Tags
-                </dt>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Tags</dt>
                 <dd className="mt-1.5 flex flex-wrap gap-1">
                   {thread.tags.map((tag) => (
                     <Link
