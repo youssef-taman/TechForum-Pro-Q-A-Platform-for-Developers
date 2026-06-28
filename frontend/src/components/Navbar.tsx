@@ -258,7 +258,7 @@ export function Navbar() {
               <span className="block font-code text-base font-bold tracking-tight text-foreground">
                 TechForum<span className="text-neon">.pro</span>
               </span>
-              <span className="block font-code text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+              <span className="block font-code text-xs uppercase tracking-[0.15em] text-muted-foreground/80">
                 dev q&a
               </span>
             </span>
@@ -275,12 +275,12 @@ export function Navbar() {
               onChange={(e) => setSearch(e.target.value)}
               type="search"
               placeholder="Search questions, tags…"
-              className="h-9 w-full rounded-full border border-border bg-surface/80 pl-9 pr-4 font-code text-sm placeholder:text-muted-foreground/40 focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon/20 transition-colors"
+              className="h-9 w-full rounded-full border border-border bg-surface/80 pl-9 pr-4 font-code text-sm placeholder:text-muted-foreground/60 focus:border-neon focus:outline-none focus:ring-1 focus:ring-neon/20 transition-colors"
             />
           </form>
 
           {/* ── Desktop nav pills ── */}
-          <nav className="hidden items-center gap-0.5 rounded-full border border-border bg-surface/60 px-1 py-1 lg:flex">
+          <nav className="hidden items-center gap-1 rounded-full border border-border bg-surface/60 px-1 py-1 lg:flex">
             <NavLink to="/" label="Feed" Icon={Terminal} />
             {isPrivileged && (
               <NavLink to="/moderator/queue" label="Queue" Icon={ShieldCheck} />
@@ -412,7 +412,7 @@ export function Navbar() {
             {/* Ask button */}
             <Link
               to="/ask"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-neon/90 px-3.5 py-1.5 font-code text-xs font-semibold text-black shadow-sm hover:bg-neon transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-neon/90 px-4 py-2 font-code text-sm font-semibold text-black shadow-sm hover:bg-neon transition-colors"
             >
               <MessageSquare className="h-3.5 w-3.5" />
               Ask
@@ -433,7 +433,7 @@ export function Navbar() {
                   title="Profile"
                   className="flex items-center gap-2 rounded-full border border-border/60 bg-surface/60 pl-1 pr-3 py-1 hover:border-neon/40 transition-colors"
                 >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary font-code text-[10px] font-bold text-primary-foreground">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary font-code text-xs font-bold text-primary-foreground">
                     {avatarLetters}
                   </div>
                   <span className="font-code text-xs text-foreground">
@@ -441,7 +441,7 @@ export function Navbar() {
                   </span>
                   {roleBadge && (
                     <span
-                      className={`rounded-full border px-1.5 py-0.5 font-code text-[9px] font-medium ${roleBadge.cls}`}
+                      className={`rounded-full border px-1.5 py-0.5 font-code text-[10px] font-medium ${roleBadge.cls}`}
                     >
                       {roleBadge.label}
                     </span>
