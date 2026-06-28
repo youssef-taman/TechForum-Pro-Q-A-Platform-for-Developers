@@ -26,6 +26,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.*;
 import org.springframework.security.access.AccessDeniedException;
@@ -33,6 +34,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ThreadService {
@@ -48,11 +50,23 @@ public class ThreadService {
   private final NotificationController notificationController;
   private final NotificationService notificationService;
 
-  private float[] getThreadEmbedding(ThreadCreateDTO threadCreateDTO) {
-    double[] embeddingDouble =
-        aiIntegrationService.getEmbedding(threadCreateDTO.title() + " " + threadCreateDTO.body());
+  private float[] getThreadEmbedding(ThreadCreateDTO dto) {
+
+    String tags =
+        dto.tags() != null
+            ? dto.tags().stream().map(TagDTO::name).collect(Collectors.joining(" "))
+            : "";
+
+    String input = (dto.title() + " " + dto.body() + " " + tags).trim();
+
+    if (input.isBlank()) {
+      return new float[0];
+    }
+
+    double[] embeddingDouble = aiIntegrationService.getEmbedding(input);
 
     float[] embedding = new float[embeddingDouble.length];
+
     for (int i = 0; i < embeddingDouble.length; i++) {
       embedding[i] = (float) embeddingDouble[i];
     }
@@ -60,12 +74,22 @@ public class ThreadService {
     return embedding;
   }
 
-  private float[] getThreadEmbedding(ThreadSearchDTO threadSearchDTO) {
-    double[] embeddingDouble =
-        aiIntegrationService.getEmbedding(
-            threadSearchDTO.keyword() + " " + threadSearchDTO.tags().toString());
+  private float[] getThreadEmbedding(ThreadSearchDTO dto) {
+
+    String keyword = dto.keyword() != null ? dto.keyword() : "";
+
+    String tags = dto.tags() != null ? String.join(" ", dto.tags()) : "";
+
+    String input = (keyword + " " + tags).trim();
+
+    if (input.isBlank()) {
+      return new float[0];
+    }
+
+    double[] embeddingDouble = aiIntegrationService.getEmbedding(input);
 
     float[] embedding = new float[embeddingDouble.length];
+
     for (int i = 0; i < embeddingDouble.length; i++) {
       embedding[i] = (float) embeddingDouble[i];
     }
@@ -129,8 +153,17 @@ public class ThreadService {
     }
   }
 
+  /**
+   * Returns tag suggestions. If the AI service is down, returns an empty array rather than crashing
+   * the request, so the frontend can show a proper fallback.
+   */
   public String[] suggestTags(String title, String body) {
-    return aiIntegrationService.getTags(title, body);
+    try {
+      return aiIntegrationService.getTags(title, body);
+    } catch (Exception e) {
+      log.warn("AI tag suggestion failed, returning empty array: {}", e.getMessage());
+      return new String[0];
+    }
   }
 
   private @NonNull Thread saveThread(
@@ -146,8 +179,12 @@ public class ThreadService {
     thread.setTags(managedTags);
     threadRepository.save(thread);
 
-    ThreadEmbedding threadEmbedding = new ThreadEmbedding(thread, embedding);
-    threadRepository.saveThreadEmbedding(threadEmbedding);
+    // CRITICAL FIX: Only save embedding if AI actually produced one.
+    // A 0-length array crashes PostgreSQL pgvector ("vector must have at least 1 dimension").
+    if (embedding != null && embedding.length > 0) {
+      ThreadEmbedding threadEmbedding = new ThreadEmbedding(thread, embedding);
+      threadRepository.saveThreadEmbedding(threadEmbedding);
+    }
 
     return thread;
   }
@@ -172,6 +209,11 @@ public class ThreadService {
     return threadMapper.toDTO(thread);
   }
 
+  /**
+   * Duplicate check endpoint used by the frontend before posting. If the AI service is down,
+   * returns an empty list so the user can still proceed (graceful degradation).
+   */
+  @Transactional(readOnly = true)
   public List<DuplicateThreadDTO> checkDuplicates(
       @Valid ThreadCreateDTO threadCreateDTO, Authentication authentication) {
 
@@ -180,12 +222,16 @@ public class ThreadService {
         .findByIdentifier(currentUserIdentifier)
         .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
 
-    float[] embedding = getThreadEmbedding(threadCreateDTO);
-    if (embedding == null || embedding.length == 0) {
+    try {
+      float[] embedding = getThreadEmbedding(threadCreateDTO);
+      if (embedding == null || embedding.length == 0) {
+        return Collections.emptyList();
+      }
+      return searchDuplicateThreadsInArchive(embedding, MATCHING_THRESHOLD, 3);
+    } catch (Exception e) {
+      log.warn("Duplicate check failed due to AI unavailability: {}", e.getMessage());
       return Collections.emptyList();
     }
-    //      checkDuplicationInTrendingThreads(embedding, 3);
-    return searchDuplicateThreadsInArchive(embedding, MATCHING_THRESHOLD, 3);
   }
 
   @Transactional
@@ -198,15 +244,24 @@ public class ThreadService {
             .findByIdentifier(currentUserIdentifier)
             .orElseThrow(() -> new UserNotFoundException(currentUserIdentifier));
 
-    float[] embedding = getThreadEmbedding(threadCreateDTO);
-
-    if (embedding == null || embedding.length == 0) {
-      embedding = new float[0];
+    // Generate embedding with graceful fallback for AI downtime.
+    float[] embedding = null;
+    try {
+      embedding = getThreadEmbedding(threadCreateDTO);
+    } catch (Exception e) {
+      log.warn("Could not generate embedding for new thread: {}", e.getMessage());
     }
+
+    // CRITICAL FIX: Actually use the ignoreDuplicates flag.
+    if (!ignoreDuplicates && embedding != null && embedding.length > 0) {
+      checkDuplicationInTrendingThreads(embedding, 3);
+      checkDuplicateInThreadArchive(embedding, 3);
+    }
+
     Set<Tag> managedTags = getOrCreateTags(threadCreateDTO.tags());
     ThreadStatus initialStatus = ThreadStatus.PENDING;
     if (author.getRole() == RoleType.MODERATOR || author.getRole() == RoleType.ADMIN) {
-      initialStatus = ThreadStatus.OPEN; // Mods and Admins bypass the queue
+      initialStatus = ThreadStatus.OPEN;
     }
 
     Thread thread = saveThread(threadCreateDTO, author, managedTags, embedding, initialStatus);
@@ -305,6 +360,8 @@ public class ThreadService {
 
     QThread thread = QThread.thread;
     BooleanBuilder filterBuilder = new BooleanBuilder();
+
+    // Always exclude PENDING threads from public-facing queries
     filterBuilder.and(thread.status.ne(ThreadStatus.PENDING));
 
     if (!threadSearchDTO.semanticAiSearch()) {
@@ -321,8 +378,9 @@ public class ThreadService {
       }
     }
 
+    // Only apply explicit status filter if it is not PENDING (avoid contradicting the base filter)
     ThreadStatus status = threadSearchDTO.status();
-    if (status != null) {
+    if (status != null && status != ThreadStatus.PENDING) {
       filterBuilder.and(thread.status.eq(status));
     }
 
@@ -345,8 +403,9 @@ public class ThreadService {
       filterBuilder.and(thread.createdAt.loe(toTime));
     }
 
+    // Use partial/fuzzy match so users don't need to type the exact username
     if (targetAuthor != null && !targetAuthor.isBlank()) {
-      filterBuilder.and(QThread.thread.author.username.equalsIgnoreCase(targetAuthor));
+      filterBuilder.and(thread.author.username.containsIgnoreCase(targetAuthor));
     }
 
     Integer minComments = threadSearchDTO.minCommentsNumber();
@@ -378,7 +437,6 @@ public class ThreadService {
   @Transactional(readOnly = true)
   public Page<ThreadDTO> getUserThreads(ThreadSearchDTO threadSearchDTO, String username) {
 
-    assert (Objects.equals(username, threadSearchDTO.author()));
     Optional<User> user = userRepository.findByIdentifier(username);
     if (user.isEmpty()) {
       throw new UserNotFoundException(username);
@@ -406,49 +464,55 @@ public class ThreadService {
   @Transactional(readOnly = true)
   public Page<ThreadDTO> searchThreads(ThreadSearchDTO threadSearchDTO) {
 
-    BooleanBuilder filterBuilder = new BooleanBuilder();
     Pageable pageable =
         buildPage(threadSearchDTO.page(), threadSearchDTO.size(), threadSearchDTO.sortBy());
 
     if (!threadSearchDTO.semanticAiSearch()) {
       String authorFilter = threadSearchDTO.author();
-      if (authorFilter == null || authorFilter.isBlank()) {
-          authorFilter = null; // ensure null if empty
+      if (authorFilter != null && authorFilter.isBlank()) {
+        authorFilter = null;
       }
-      filterBuilder = buildSearchEngine(threadSearchDTO, authorFilter);
-      // filterBuilder.and(searchFilters);
+      BooleanBuilder filterBuilder = buildSearchEngine(threadSearchDTO, authorFilter);
       Page<Thread> threadPage = threadRepository.findAll(filterBuilder, pageable);
       return threadPage.map(threadMapper::toDTO);
     }
 
-    float[] embedding = getThreadEmbedding(threadSearchDTO);
-    List<DuplicateThreadDTO> duplicateThreadDTOS;
+    try {
+      float[] embedding = getThreadEmbedding(threadSearchDTO);
+      if (embedding == null || embedding.length == 0) {
+        return new PageImpl<>(Collections.emptyList(), pageable, 0);
+      }
 
-    duplicateThreadDTOS = searchDuplicateThreadsInArchive(embedding, 0.7, 100);
-    if (duplicateThreadDTOS.isEmpty()) {
+      List<DuplicateThreadDTO> duplicateThreadDTOS =
+          searchDuplicateThreadsInArchive(embedding, MATCHING_THRESHOLD, 100);
+      if (duplicateThreadDTOS.isEmpty()) {
+        return new PageImpl<>(Collections.emptyList(), pageable, 0);
+      }
+
+      List<UUID> orderedIds =
+          duplicateThreadDTOS.stream().map(DuplicateThreadDTO::threadId).toList();
+
+      BooleanBuilder filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
+      filterBuilder.and(QThread.thread.id.in(orderedIds));
+
+      Iterable<Thread> filteredIterable = threadRepository.findAll(filterBuilder);
+      List<Thread> filteredThreads = new ArrayList<>();
+      filteredIterable.forEach(filteredThreads::add);
+      filteredThreads.sort(Comparator.comparingInt(t -> orderedIds.indexOf(t.getId())));
+
+      int start = (int) pageable.getOffset();
+      int end = Math.min((start + pageable.getPageSize()), filteredThreads.size());
+
+      List<ThreadDTO> sortedDtos = Collections.emptyList();
+      if (start < filteredThreads.size()) {
+        sortedDtos = filteredThreads.subList(start, end).stream().map(threadMapper::toDTO).toList();
+      }
+
+      return new PageImpl<>(sortedDtos, pageable, filteredThreads.size()); // ← moved here
+    } catch (Exception e) {
+      log.warn("Semantic search failed, returning empty results: {}", e.getMessage());
       return new PageImpl<>(Collections.emptyList(), pageable, 0);
     }
-
-    List<UUID> orderedIds = duplicateThreadDTOS.stream().map(DuplicateThreadDTO::threadId).toList();
-
-    filterBuilder = buildSearchEngine(threadSearchDTO, threadSearchDTO.author());
-    filterBuilder.and(QThread.thread.id.in(orderedIds));
-
-    Iterable<Thread> filteredIterable = threadRepository.findAll(filterBuilder);
-    List<Thread> filteredThreads = new ArrayList<>();
-
-    filteredIterable.forEach(filteredThreads::add);
-    filteredThreads.sort(Comparator.comparingInt(t -> orderedIds.indexOf(t.getId())));
-
-    int start = (int) pageable.getOffset();
-    int end = Math.min((start + pageable.getPageSize()), filteredThreads.size());
-
-    List<ThreadDTO> sortedDtos = new ArrayList<>();
-    if (start < filteredThreads.size()) {
-      sortedDtos = filteredThreads.subList(start, end).stream().map(threadMapper::toDTO).toList();
-    }
-
-    return new PageImpl<>(sortedDtos, pageable, filteredThreads.size());
   }
 
   @Transactional(readOnly = true)

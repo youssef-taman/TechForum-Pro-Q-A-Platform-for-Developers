@@ -50,7 +50,7 @@ public interface ThreadRepository
         FROM thread_embeddings e
         JOIN Threads th ON e.thread_id = th.id
         JOIN Users u ON u.id = th.user_id
-        WHERE (1 - (e.embedding <=> CAST(:embedding AS VECTOR))) >= :threshold
+        WHERE (1 - (e.embedding <=> CAST(:embedding AS VECTOR))) >= :threshold AND th.status IN ('OPEN', 'RESOLVED')
         ORDER BY e.embedding <=> CAST(:embedding AS VECTOR) ASC
         LIMIT :limit
         """,
