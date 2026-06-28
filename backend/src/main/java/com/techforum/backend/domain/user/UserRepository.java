@@ -77,4 +77,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
       String username, String email, Pageable pageable);
 
   Optional<User> findByUsername(String username);
+
+  long countByIsSuspendedTrue();
 }

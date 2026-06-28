@@ -1,6 +1,7 @@
 package com.techforum.backend.domain.user;
 
 import com.techforum.backend.common.exception.user.UserNotFoundException;
+import com.techforum.backend.domain.comment.CommentRepository;
 import com.techforum.backend.domain.thread.ThreadRepository;
 import com.techforum.backend.domain.thread.enums.ThreadStatus;
 import com.techforum.backend.domain.user.dtos.AdminMetricsDTO;
@@ -25,6 +26,7 @@ public class UserService {
   private final UserMapper userMapper;
   private final UserRepository userRepository;
   private final ThreadRepository threadRepository;
+  private final CommentRepository commentRepository;
 
   @Transactional
   public void promoteUser(UUID id, RoleType role) {
@@ -98,11 +100,22 @@ public class UserService {
   }
 
   public AdminMetricsDTO getMetrics() {
+    long open = threadRepository.countByStatus(ThreadStatus.OPEN);
+    long resolved = threadRepository.countByStatus(ThreadStatus.RESOLVED);
+    long closed = threadRepository.countByStatus(ThreadStatus.CLOSED);
+    long pending = threadRepository.countByStatus(ThreadStatus.PENDING);
+    long total = open + resolved + closed + pending;
+    double resolutionRate = total > 0 ? (double) resolved / total * 100 : 0;
+
     return new AdminMetricsDTO(
         userRepository.count(),
-        threadRepository.countByStatus(ThreadStatus.OPEN),
-        threadRepository.countByStatus(ThreadStatus.RESOLVED),
-        threadRepository.countByStatus(ThreadStatus.CLOSED));
+        userRepository.countByIsSuspendedTrue(),
+        open,
+        pending,
+        resolved,
+        closed,
+        commentRepository.count(),
+        Math.round(resolutionRate * 10.0) / 10.0);
   }
 
   private void verifyCurrentUserCanManageUsers() {
