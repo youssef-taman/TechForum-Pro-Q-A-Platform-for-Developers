@@ -7,6 +7,7 @@ export type VoteType = "UPVOTE" | "DOWNVOTE";
 
 export interface User {
     id: string;
+    email: string;
     username: string;
     role: UserRole;
     isSuspended: boolean;

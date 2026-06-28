@@ -54,6 +54,8 @@ export const API_ENDPOINTS = {
 
     modPendingThreads: `${API_BASE_URL}/threads/moderation/pending`,
     moderateThread: (id: string) => `${API_BASE_URL}/threads/${id}/moderate`,
+
+    userMetrics: `${API_BASE_URL}/users/metrics`,
 } as const;
 
 const TOKEN_KEY = "tf_access_token";
@@ -101,6 +103,60 @@ export function getStoredUser(): StoredUser | null {
     }
 }
 
+// ── Typed API error ──────────────────────────────────────────────────────────
+// Thrown by apiFetch on any non-2xx response.
+// `message`  — human-readable string safe to display directly to users
+// `status`   — HTTP status code (401, 403, 404, 422, 500 …)
+// `fields`   — optional field-level validation errors from the backend
+export class ApiError extends Error {
+    status: number;
+    fields?: Record<string, string>;
+
+    constructor(message: string, status: number, fields?: Record<string, string>) {
+        super(message);
+        this.name = "ApiError";
+        this.status = status;
+        this.fields = fields;
+    }
+}
+
+// ── Friendly message map ──────────────────────────────────────────────────────
+// Maps backend messages or HTTP status codes to beginner-friendly copy.
+// Add entries here as new backend error messages are discovered.
+const FRIENDLY_MESSAGES: Record<string, string> = {
+    // Auth
+    "Invalid credentials":        "Incorrect username/email or password. Please try again.",
+    "User not found":              "We couldn't find an account with those details.",
+    "Email already in use":        "That email address is already registered. Try signing in instead.",
+    "Username already taken":      "That username is already taken. Please choose another.",
+    "Account suspended":           "Your account has been suspended. Contact support for help.",
+    "Email not verified":          "Please verify your email address before signing in.",
+    "Token expired":               "Your session has expired. Please sign in again.",
+    "Invalid token":               "This link is no longer valid. Please request a new one.",
+    // Generic HTTP fallbacks
+    "HTTP 400":                    "Something looks wrong with your request. Please check your input.",
+    "HTTP 404":                    "We couldn't find what you were looking for.",
+    "HTTP 409":                    "A conflict occurred — this item may already exist.",
+    "HTTP 422":                    "Some fields are invalid. Please review your input.",
+    "HTTP 429":                    "Too many requests. Please wait a moment and try again.",
+    "HTTP 500":                    "Something went wrong on our end. Please try again shortly.",
+    "HTTP 503":                    "The service is temporarily unavailable. Please try again soon.",
+};
+
+function toFriendlyMessage(raw: string, status: number): string {
+    // Exact match on backend message
+    if (FRIENDLY_MESSAGES[raw]) return FRIENDLY_MESSAGES[raw];
+    // HTTP status fallback
+    const statusKey = `HTTP ${status}`;
+    if (FRIENDLY_MESSAGES[statusKey]) return FRIENDLY_MESSAGES[statusKey];
+    // If the raw message is suspiciously technical (contains { or stack traces), hide it
+    if (raw.startsWith("{") || raw.includes("Exception") || raw.includes("Error:")) {
+        return "An unexpected error occurred. Please try again.";
+    }
+    // Otherwise the backend message is already user-friendly enough
+    return raw;
+}
+
 export async function apiFetch<T = unknown>(
     url: string,
     options: RequestInit = {},
@@ -114,23 +170,35 @@ export async function apiFetch<T = unknown>(
 
     const res = await fetch(url, {...options, headers});
 
-    if (res.status === 401 || res.status === 403) {
-        clearAuth();
-        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    if (!res.ok) {
+        // On 401/403: clear local auth state. Only redirect if NOT already on an
+        // auth page so we don't loop — and only for session expiry (403/401 on
+        // non-login endpoints), not for bad credentials on /auth/login itself.
+        if (res.status === 401 &&
+            typeof window !== "undefined" &&
+            !window.location.pathname.startsWith("/login") &&
+            !url.includes("/auth/")) {
+            clearAuth();
             window.location.href = "/login";
         }
-    }
 
-    if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText);
+        const rawText = await res.text().catch(() => "");
+        let rawMessage = `HTTP ${res.status}`;
+        let fields: Record<string, string> | undefined;
 
-        // NEW: Try to parse the error as JSON to get the real backend message
-        try {
-            const errorJson = JSON.parse(text);
-            throw new Error(errorJson.message || text);
-        } catch {
-            throw new Error(text || `HTTP ${res.status}`);
+        if (rawText) {
+            try {
+                const json = JSON.parse(rawText);
+                // Backend shape: { status, message, errors }
+                if (typeof json.message === "string") rawMessage = json.message;
+                if (json.errors && typeof json.errors === "object") fields = json.errors;
+            } catch {
+                // Not JSON — use raw text if it looks safe
+                rawMessage = rawText.trim() || rawMessage;
+            }
         }
+
+        throw new ApiError(toFriendlyMessage(rawMessage, res.status), res.status, fields);
     }
 
     if (res.status === 204) return null as T;
