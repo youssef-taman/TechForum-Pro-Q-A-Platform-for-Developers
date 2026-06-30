@@ -6,6 +6,28 @@
     <title>TechForum Pro</title>
     <meta name="description" content="Developer Q&A Platform" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!-- Preconnect to Google Fonts for faster resolution -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!--
+      Three fonts, one request:
+      · Inter          — body text (humanist sans-serif, excellent screen legibility)
+      · Space Grotesk  — headings (geometric, matches the terminal aesthetic)
+      · IBM Plex Mono  — code, labels, badges (monospace, designed for screens)
+
+      Weight strategy:
+      · Inter 400 body / 500 UI labels / 600 subheadings / 700 bold
+      · Space Grotesk 600/700 for page headings only
+      · IBM Plex Mono 400/500 for code blocks and monospace UI chrome
+
+      display=swap: text stays visible while fonts load (no invisible-text flash).
+    -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="root"></div>

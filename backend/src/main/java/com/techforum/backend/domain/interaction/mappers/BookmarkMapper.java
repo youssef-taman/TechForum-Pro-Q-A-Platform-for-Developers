@@ -10,5 +10,6 @@ public interface BookmarkMapper {
 
   @Mapping(source = "thread.title", target = "threadTitle")
   @Mapping(source = "thread.id", target = "threadId")
+  @Mapping(source = "thread.body", target = "threadBody")
   BookmarkDTO toDTO(Bookmark bookmark);
 }

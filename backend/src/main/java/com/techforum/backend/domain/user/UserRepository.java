@@ -3,6 +3,8 @@ package com.techforum.backend.domain.user;
 import com.techforum.backend.domain.user.enums.RoleType;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -57,9 +59,24 @@ public interface UserRepository extends JpaRepository<User, UUID> {
    */
   @Query(
       """
-          SELECT COUNT(u) > 0 FROM User u
-          WHERE u.username = LOWER(:username)
-             OR u.email = LOWER(:email)
-      """)
+            SELECT COUNT(u) > 0 FROM User u
+            WHERE u.username = LOWER(:username)
+                OR u.email = LOWER(:email)
+        """)
   boolean existsByUsernameOrEmail(@Param("username") String username, @Param("email") String email);
+
+  /**
+   * Performs a case-insensitive substring search on username OR email and returns a paged result.
+   *
+   * @param username query for username (substring match)
+   * @param email query for email (substring match)
+   * @param pageable paging information
+   * @return page of users matching the query
+   */
+  Page<User> findByUsernameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+      String username, String email, Pageable pageable);
+
+  Optional<User> findByUsername(String username);
+
+  long countByIsSuspendedTrue();
 }

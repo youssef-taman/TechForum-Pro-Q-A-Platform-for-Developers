@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -54,5 +55,11 @@ public class AuthExceptionHandler {
                 .status(403)
                 .message("You do not have permission to access this resource")
                 .build());
+  }
+
+  @ExceptionHandler(LockedException.class)
+  public ResponseEntity<ApiErrorResponse> handleLockedException(LockedException ex) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(ApiErrorResponse.builder().status(401).message("Account suspended").build());
   }
 }

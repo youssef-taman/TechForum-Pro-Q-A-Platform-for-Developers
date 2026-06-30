@@ -8,6 +8,6 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "spring")
 public interface UserMapper {
 
-  @Mapping(target = "isSuspended", ignore = true)
+  @Mapping(target = "isSuspended", source = "suspended")
   UserDTO toDTO(User user);
 }

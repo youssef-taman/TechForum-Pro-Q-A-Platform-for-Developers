@@ -2,11 +2,12 @@
 // Aligned exactly with backend DTOs
 
 export type UserRole = "ADMIN" | "MODERATOR" | "USER";
-export type ThreadStatus = "OPEN" | "RESOLVED" | "CLOSED";
+export type ThreadStatus = "OPEN" | "RESOLVED" | "CLOSED" | "PENDING";
 export type VoteType = "UPVOTE" | "DOWNVOTE";
 
 export interface User {
     id: string;
+    email: string;
     username: string;
     role: UserRole;
     isSuspended: boolean;
@@ -44,6 +45,7 @@ export interface Comment {
     totalReplies?: number;
     score: number;
     createdAt: string;
+    userVote?: VoteType | null;
 }
 
 export interface Bookmark {

@@ -17,6 +17,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -29,8 +30,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
   private static final String AUTH_HEADER = "Authorization";
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String BLACKLIST_PREFIX = "blacklist:";
+
+  // private static final String[] PUBLIC_PATH_PREFIXES = {
+  //   "/auth/login", "/auth/register", "/swagger-ui", "/v3/api-docs"
+  // };
   private static final String[] PUBLIC_PATH_PREFIXES = {
-    "/auth/login", "/auth/register", "/swagger-ui", "/v3/api-docs"
+    "/auth/", "/swagger-ui/", "/v3/api-docs/", "/actuator/"
   };
 
   private final JwtUtil jwtUtil;
@@ -67,6 +72,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     String authHeader = request.getHeader(AUTH_HEADER);
 
     if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+      // Fallback: allow token via query parameter for transports that can't set headers
+      // (SSE/EventSource)
+      String param = request.getParameter("access_token");
+      if (param != null && !param.isBlank()) {
+        return Optional.of(param.trim());
+      }
       return Optional.empty();
     }
 
@@ -107,6 +118,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     } catch (JwtException e) {
       log.warn("Rejected Invalid JWT: {}", e.getMessage());
+    } catch (UsernameNotFoundException e) {
+      log.warn("JWT rejected — user no longer exists: {}", e.getMessage());
     }
   }
 

@@ -1,17 +1,8 @@
-import {createFileRoute, Link, Outlet} from "@tanstack/react-router";
-import {
-    Users,
-    MessageSquare,
-    CheckCircle2,
-    XCircle,
-    ArrowRight,
-    Loader2,
-    LayoutDashboard,
-} from "lucide-react";
+import {createFileRoute, Link, Outlet, useLocation} from "@tanstack/react-router";
+import { Users, UserX, MessageSquare, CheckCircle2, XCircle, Clock, TrendingUp, ArrowRight, Loader2, LayoutDashboard } from "lucide-react";
 import {useEffect, useState} from "react";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
 import {useAuth} from "@/lib/auth-context";
-import type {Page, Thread, User} from "@/types";
 import {toast} from "sonner";
 
 export const Route = createFileRoute("/admin")({
@@ -21,9 +12,13 @@ export const Route = createFileRoute("/admin")({
 
 interface Metrics {
     totalUsers: number;
+    suspendedUsers: number;
     openThreads: number;
+    pendingThreads: number;
     resolvedThreads: number;
     closedThreads: number;
+    totalComments: number;
+    resolutionRate: number;
 }
 
 function StatCard({
@@ -31,11 +26,13 @@ function StatCard({
     label,
     value,
     color = "text-neon",
+    suffix = "",
 }: {
     icon: React.ElementType;
     label: string;
     value: number | null;
     color?: string;
+    suffix?: string;
 }) {
     return (
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
@@ -46,23 +43,22 @@ function StatCard({
                 )}
             </div>
             <p className={`mt-3 font-code text-2xl font-bold ${color}`}>
-                {value !== null ? value.toLocaleString() : "—"}
+                {value !== null ? `${value.toLocaleString()}${suffix}` : "—"}
             </p>
-            <p className="mt-0.5 font-code text-xs text-muted-foreground">
-                {label}
-            </p>
+            <p className="mt-0.5 font-code text-xs text-muted-foreground">{label}</p>
         </div>
     );
 }
 
 function AdminDashboard() {
     const {user, isLoggedIn} = useAuth();
+    const location = useLocation();
     const [metrics, setMetrics] = useState<Metrics | null>(null);
     const [loading, setLoading] = useState(true);
 
     const isAdmin = isLoggedIn && user?.role?.toUpperCase() === "ADMIN";
+    const isOnUsersPage = location.pathname === "/admin/users";
 
-    // FIX: real API calls replacing hardcoded "API" strings
     useEffect(() => {
         if (!isAdmin) {
             setLoading(false);
@@ -71,27 +67,9 @@ function AdminDashboard() {
         const load = async () => {
             setLoading(true);
             try {
-                const [usersRes, openRes, resolvedRes, closedRes] =
-                    await Promise.all([
-                        apiFetch<Page<User>>(
-                            `${API_ENDPOINTS.users}?page=0&size=1`,
-                        ),
-                        apiFetch<Page<Thread>>(
-                            `${API_ENDPOINTS.threads}?status=OPEN&page=0&size=1`,
-                        ),
-                        apiFetch<Page<Thread>>(
-                            `${API_ENDPOINTS.threads}?status=RESOLVED&page=0&size=1`,
-                        ),
-                        apiFetch<Page<Thread>>(
-                            `${API_ENDPOINTS.threads}?status=CLOSED&page=0&size=1`,
-                        ),
-                    ]);
-                setMetrics({
-                    totalUsers: usersRes.totalElements,
-                    openThreads: openRes.totalElements,
-                    resolvedThreads: resolvedRes.totalElements,
-                    closedThreads: closedRes.totalElements,
-                });
+                // Single API call using the dedicated metrics endpoint
+                const data = await apiFetch<Metrics>(API_ENDPOINTS.userMetrics);
+                setMetrics(data);
             } catch {
                 toast.error("Failed to load metrics");
             } finally {
@@ -120,6 +98,7 @@ function AdminDashboard() {
 
     return (
         <div className="mx-auto max-w-4xl space-y-8">
+            {/* Header */}
             <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                     <LayoutDashboard className="h-5 w-5 text-primary" />
@@ -134,77 +113,67 @@ function AdminDashboard() {
                 </div>
             </div>
 
-            {/* KPI cards */}
+            {/* Row 1 */}
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <StatCard
-                    icon={Users}
-                    label="Total Users"
-                    value={loading ? null : (metrics?.totalUsers ?? 0)}
-                    color="text-primary"
-                />
-                <StatCard
-                    icon={MessageSquare}
-                    label="Open Threads"
-                    value={loading ? null : (metrics?.openThreads ?? 0)}
-                    color="text-emerald-500"
-                />
-                <StatCard
-                    icon={CheckCircle2}
-                    label="Resolved"
-                    value={loading ? null : (metrics?.resolvedThreads ?? 0)}
-                    color="text-blue-500"
-                />
-                <StatCard
-                    icon={XCircle}
-                    label="Closed"
-                    value={loading ? null : (metrics?.closedThreads ?? 0)}
-                    color="text-muted-foreground"
-                />
+                <StatCard icon={Users} label="Total Users" value={loading ? null : (metrics?.totalUsers ?? 0)} color="text-primary" />
+                <StatCard icon={UserX} label="Suspended" value={loading ? null : (metrics?.suspendedUsers ?? 0)} color="text-orange-500" />
+                <StatCard icon={MessageSquare} label="Total Comments" value={loading ? null : (metrics?.totalComments ?? 0)} color="text-neon" />
+                <StatCard icon={TrendingUp} label="Resolution Rate" value={loading ? null : (metrics?.resolutionRate ?? 0)} color="text-blue-500" suffix="%" />
             </div>
 
-            {/* Quick access */}
-            <div>
-                <h2 className="mb-3 font-code text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                    Management
-                </h2>
-                <div className="grid gap-3 sm:grid-cols-2">
-                    {[
-                        {
-                            to: "/admin/users",
-                            label: "User Directory",
-                            desc: "Manage roles, suspend or delete users.",
-                            icon: Users,
-                        },
-                        {
-                            to: "/moderator/queue",
-                            label: "Moderator Queue",
-                            desc: "Review closed and flagged threads.",
-                            icon: MessageSquare,
-                        },
-                    ].map(({to, label, desc, icon: Icon}) => (
-                        <Link
-                            key={to}
-                            to={to}
-                            className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:border-neon/40 hover:shadow-md"
-                        >
-                            <div className="flex items-start gap-3">
-                                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-surface">
-                                    <Icon className="h-4 w-4 text-muted-foreground group-hover:text-neon" />
-                                </div>
-                                <div>
-                                    <p className="font-code text-sm font-semibold text-foreground">
-                                        {label}
-                                    </p>
-                                    <p className="mt-0.5 font-code text-xs text-muted-foreground">
-                                        {desc}
-                                    </p>
-                                </div>
-                            </div>
-                            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-neon" />
-                        </Link>
-                    ))}
-                </div>
+            {/* Row 2 */}
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <StatCard icon={MessageSquare} label="Open Threads" value={loading ? null : (metrics?.openThreads ?? 0)} color="text-emerald-500" />
+                <StatCard icon={Clock} label="Pending Review" value={loading ? null : (metrics?.pendingThreads ?? 0)} color="text-amber-500" />
+                <StatCard icon={CheckCircle2} label="Resolved" value={loading ? null : (metrics?.resolvedThreads ?? 0)} color="text-blue-500" />
+                <StatCard icon={XCircle} label="Closed" value={loading ? null : (metrics?.closedThreads ?? 0)} color="text-muted-foreground" />
             </div>
+
+            {/* Quick access — hidden when already on the users page */}
+            {!isOnUsersPage && (
+                <div>
+                    <h2 className="mb-3 font-code text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                        Management
+                    </h2>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {[
+                            {
+                                to: "/admin/users",
+                                label: "User Directory",
+                                desc: "Manage roles, suspend or delete users.",
+                                icon: Users,
+                            },
+                            {
+                                to: "/moderator/queue",
+                                label: "Moderator Queue",
+                                desc: "Review closed and flagged threads.",
+                                icon: MessageSquare,
+                            },
+                        ].map(({to, label, desc, icon: Icon}) => (
+                            <Link
+                                key={to}
+                                to={to}
+                                className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:border-neon/40 hover:shadow-md"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-surface">
+                                        <Icon className="h-4 w-4 text-muted-foreground group-hover:text-neon transition-colors" />
+                                    </div>
+                                    <div>
+                                        <p className="font-code text-sm font-semibold text-foreground">
+                                            {label}
+                                        </p>
+                                        <p className="mt-0.5 font-code text-xs text-muted-foreground">
+                                            {desc}
+                                        </p>
+                                    </div>
+                                </div>
+                                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-neon" />
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <Outlet />
         </div>

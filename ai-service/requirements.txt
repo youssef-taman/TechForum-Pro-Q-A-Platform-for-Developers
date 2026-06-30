@@ -1,0 +1,10 @@
+--index-url https://download.pytorch.org/whl/cpu
+torch
+--extra-index-url https://pypi.org/simple
+fastapi
+uvicorn
+sentence-transformers
+transformers
+joblib
+huggingface_hub
+pydantic-settings

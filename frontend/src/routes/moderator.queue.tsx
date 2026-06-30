@@ -12,8 +12,8 @@ import {
     CheckCircle2,
     Loader2,
     ShieldCheck,
-    Trash2,
     XCircle,
+    Check,
 } from "lucide-react";
 import {useAuth} from "@/lib/auth-context";
 import {apiFetch, API_ENDPOINTS} from "@/lib/api";
@@ -32,7 +32,7 @@ function ModQueue() {
     const [threads, setThreads] = useState<Thread[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionId, setActionId] = useState<string | null>(null);
-    type ThreadSort = "latest" | "oldest" | "most_commented";
+    type ThreadSort = "latest" | "oldest";
     const [threadSort, setThreadSort] = useState<ThreadSort>("latest");
 
     const isMod =
@@ -46,24 +46,23 @@ function ModQueue() {
             return;
         }
         setLoading(true);
-        const fetchAndMaybeSort = async () => {
+        const fetchQueue = async () => {
             try {
-                const sortParam = threadSort === "oldest" ? "older" : "latest";
                 const data = await apiFetch<Page<Thread>>(
-                    `${API_ENDPOINTS.threads}?status=OPEN&size=50&sortBy=${sortParam}`,
+                    `${API_ENDPOINTS.modPendingThreads}?page=0&size=50`,
                 );
                 let items = data.content;
-                if (threadSort === "most_commented") {
-                    items = items.sort((a, b) => (b.numberComments ?? 0) - (a.numberComments ?? 0));
+                if (threadSort === "oldest") {
+                    items = [...items].reverse();
                 }
                 setThreads(items);
             } catch {
-                toast.error("Failed to load queue");
+                toast.error("Failed to load moderation queue");
             } finally {
                 setLoading(false);
             }
         };
-        void fetchAndMaybeSort();
+        void fetchQueue();
     }, [isMod, threadSort]);
 
     const act = async (id: string, fn: () => Promise<void>) => {
@@ -75,24 +74,25 @@ function ModQueue() {
         }
     };
 
-    const closeThread = (id: string) =>
+    const approveThread = (id: string) =>
         act(id, async () => {
-            await apiFetch(API_ENDPOINTS.threadById(id), {
+            await apiFetch(API_ENDPOINTS.moderateThread(id), {
                 method: "PATCH",
-                body: JSON.stringify({status: "CLOSED"}),
+                body: JSON.stringify({action: "approve"}),
             });
             setThreads((prev) => prev.filter((t) => t.id !== id));
-            toast.success("Thread closed");
+            toast.success("Thread approved");
         });
 
-    const deleteThread = (id: string) => {
-        if (!confirm("Delete this thread permanently?")) return;
+    const rejectThread = (id: string) =>
         act(id, async () => {
-            await apiFetch(API_ENDPOINTS.threadById(id), {method: "DELETE"});
+            await apiFetch(API_ENDPOINTS.moderateThread(id), {
+                method: "PATCH",
+                body: JSON.stringify({action: "reject"}),
+            });
             setThreads((prev) => prev.filter((t) => t.id !== id));
-            toast.success("Thread deleted");
+            toast.success("Thread rejected");
         });
-    };
 
     if (!isMod) {
         return (
@@ -123,7 +123,7 @@ function ModQueue() {
                         mod-queue
                     </h1>
                     <p className="font-code text-xs text-muted-foreground">
-                        {threads.length === 0 && loading ? "Loading…" : `${threads.length} items`}
+                        {threads.length === 0 && loading ? "Loading…" : `${threads.length} pending`}
                         {loading && threads.length > 0 && (
                             <Loader2 className="ml-2 inline-block h-4 w-4 animate-spin text-neon" />
                         )}
@@ -137,7 +137,6 @@ function ModQueue() {
                         <SelectContent>
                             <SelectItem value="latest">Latest</SelectItem>
                             <SelectItem value="oldest">Oldest</SelectItem>
-                            <SelectItem value="most_commented">Most commented</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -154,7 +153,7 @@ function ModQueue() {
                         Queue is clear
                     </p>
                     <p className="mt-1 font-code text-xs text-muted-foreground/60">
-                        No closed threads to review
+                        No pending threads awaiting moderation
                     </p>
                 </div>
             ) : (
@@ -164,8 +163,7 @@ function ModQueue() {
                         return (
                             <div
                                 key={item.id}
-                                className="rounded-xl border border-border bg-card p-5 shadow-sm transform-gpu transition-transform duration-150 ease-out hover:-translate-y-1 hover:shadow-md"
-                                style={{willChange: "transform"}}
+                                className="rounded-xl border border-border bg-card p-5 shadow-sm"
                             >
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="min-w-0 flex-1">
@@ -196,9 +194,7 @@ function ModQueue() {
                                                 ·
                                             </span>
                                             <span>
-                                                {new Date(
-                                                    item.createdAt,
-                                                ).toLocaleDateString()}
+                                                {new Date(item.createdAt).toLocaleDateString()}
                                             </span>
                                             <span className="text-muted-foreground/40">
                                                 ·
@@ -215,22 +211,16 @@ function ModQueue() {
                                         ) : (
                                             <>
                                                 <button
-                                                    onClick={() =>
-                                                        closeThread(item.id)
-                                                    }
-                                                    className="flex items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 font-code text-xs text-destructive hover:bg-destructive/10"
+                                                    onClick={() => approveThread(item.id)}
+                                                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 px-3 py-1.5 font-code text-xs text-emerald-600 hover:bg-emerald-500/10"
                                                 >
-                                                    <XCircle className="h-3.5 w-3.5" />{" "}
-                                                    Close
+                                                    <Check className="h-3.5 w-3.5" /> Approve
                                                 </button>
                                                 <button
-                                                    onClick={() =>
-                                                        deleteThread(item.id)
-                                                    }
-                                                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 font-code text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
+                                                    onClick={() => rejectThread(item.id)}
+                                                    className="flex items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 font-code text-xs text-destructive hover:bg-destructive/10"
                                                 >
-                                                    <Trash2 className="h-3.5 w-3.5" />{" "}
-                                                    Delete
+                                                    <XCircle className="h-3.5 w-3.5" /> Reject
                                                 </button>
                                             </>
                                         )}

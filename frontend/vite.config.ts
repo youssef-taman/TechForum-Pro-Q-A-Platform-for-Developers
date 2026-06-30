@@ -1,19 +1,16 @@
-import { defineConfig } from "vite";
+// vite.config.ts
+import {defineConfig} from "vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
-import tailwindcss from "@tailwindcss/vite"; // ADD THIS IMPORT
+import tailwindcss from "@tailwindcss/vite";
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    tsconfigPaths(),
-    tailwindcss(),
-  ],
+  plugins: [react(), tsconfigPaths(), tailwindcss()],
   server: {
     proxy: {
       "/api": {
-        target: "http://app:8080",
+        // Reads from .env or docker-compose. Falls back to localhost for local dev.
+        target: process.env.VITE_API_PROXY_TARGET || "http://localhost:8080",
         changeOrigin: true,
       },
     },

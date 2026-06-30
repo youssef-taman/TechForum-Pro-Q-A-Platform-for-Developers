@@ -50,13 +50,58 @@
   --color-surface-foreground: var(--surface-foreground);
   --font-mono: var(--font-mono);
   --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   ═══════════════════════════════════════════════════════════ */
 
 :root {
   --radius: 0.625rem;
-  --font-sans: "Inter", sans-serif;
-  --font-heading: "Space Grotesk", sans-serif;
-  --font-mono: "IBM Plex Mono", monospace;
+
+  /* ── Font stacks ──────────────────────────────────────────
+     Loaded via <link> in index.html.
+     System fallbacks ensure text is readable even before
+     the web fonts arrive (font-display: swap in Google Fonts).
+  ── */
+  --font-sans:    "Inter",        ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
+
+  /* ── Type scale ───────────────────────────────────────────
+     Base is 16px (set on html below).
+     All rem values scale with the user's font-size preference
+     (html[data-font-size] overrides the base).
+  ── */
+  --text-xs:   0.75rem;   /* 12px — badges, timestamps, captions      */
+  --text-sm:   0.875rem;  /* 14px — secondary labels, metadata         */
+  --text-base: 1rem;      /* 16px — body text, form inputs             */
+  --text-lg:   1.125rem;  /* 18px — card titles, section leads         */
+  --text-xl:   1.25rem;   /* 20px — page subheadings                   */
+  --text-2xl:  1.5rem;    /* 24px — page headings                      */
+  --text-3xl:  1.875rem;  /* 30px — hero headings                      */
+
+  /* ── Line heights ─────────────────────────────────────────
+     Tighter for headings, looser for reading prose.
+  ── */
+  --leading-tight:   1.25;
+  --leading-snug:    1.375;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose:   1.75;
+
+  /* ── Letter spacing ───────────────────────────────────────
+     Negative tracking on large headings makes them feel
+     more intentional; slightly wide on all-caps labels.
+  ── */
+  --tracking-tight:  -0.025em;
+  --tracking-normal:  0em;
+  --tracking-wide:    0.025em;
+  --tracking-wider:   0.05em;
+  --tracking-widest:  0.1em;
+
+  /* ── Colors (light mode) ─────────────────────────────────── */
   --background: oklch(0.985 0.002 250);
   --foreground: oklch(0.145 0.03 265);
   --card: oklch(1 0 0);
@@ -68,7 +113,7 @@
   --secondary: oklch(0.955 0.01 250);
   --secondary-foreground: oklch(0.25 0.03 265);
   --muted: oklch(0.955 0.01 250);
-  --muted-foreground: oklch(0.52 0.03 260);
+  --muted-foreground: oklch(0.48 0.03 260); /* raised from 0.52 → easier to read */
   --accent: oklch(0.94 0.015 250);
   --accent-foreground: oklch(0.25 0.03 265);
   --destructive: oklch(0.58 0.24 27);
@@ -107,7 +152,7 @@
   --secondary: oklch(0.21 0.025 265);
   --secondary-foreground: oklch(0.88 0.01 255);
   --muted: oklch(0.21 0.025 265);
-  --muted-foreground: oklch(0.58 0.025 260);
+  --muted-foreground: oklch(0.62 0.025 260); /* raised from 0.58 → easier to read */
   --accent: oklch(0.22 0.028 265);
   --accent-foreground: oklch(0.88 0.01 255);
   --destructive: oklch(0.62 0.23 27);
@@ -129,38 +174,95 @@
   --sidebar-ring: oklch(0.68 0.16 265);
 }
 
-/* ── Font size ── */
-html[data-font-size="sm"] {
-  font-size: 13px;
+/* ═══════════════════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════════════════ */
+
+/* Default base font size — 16px.
+   The [data-font-size] overrides below let users scale the
+   entire UI up or down using the font size preference toggle. */
+html {
+  font-size: 16px;
 }
 
-html[data-font-size="md"] {
-  font-size: 15px;
-}
+/* ── User font-size preference ── */
+html[data-font-size="sm"] { font-size: 14px; }
+html[data-font-size="md"] { font-size: 16px; }
+html[data-font-size="lg"] { font-size: 18px; }
+html[data-font-size="xl"] { font-size: 20px; }
 
-html[data-font-size="lg"] {
-  font-size: 17px;
-}
-
-html[data-font-size="xl"] {
-  font-size: 19px;
-}
-
-* {
+*,
+*::before,
+*::after {
   border-color: var(--border);
+  /* Smooth font rendering on all platforms */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent layout shift when bold text appears on hover/focus */
+  text-rendering: optimizeLegibility;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
 }
 
+/* ── Heading defaults ── */
+/* Space Grotesk for all h1–h4; tight tracking at large sizes */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--foreground);
+}
+
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl);  }
+h4 { font-size: var(--text-lg);  letter-spacing: var(--tracking-normal); }
+
+/* h5/h6 stay in Inter — they're used as UI labels, not headings */
+h5, h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+
+/* ── Paragraph defaults ── */
+p {
+  line-height: var(--leading-relaxed);
+}
+
+/* ── Small / caption text ── */
+small, .text-caption {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+/* ── Monospace utility class ── */
+/* Use font-code for: code labels, badges, terminal chrome, timestamps */
 .font-code {
   font-family: var(--font-mono);
+  font-size: 0.9em; /* mono fonts optically read ~10% larger — compensate */
+  font-feature-settings: "liga" 1, "calt" 1; /* ligatures in IBM Plex Mono */
 }
+
+/* ── Heading utility class ── */
+/* Apply to any non-heading element that needs the Space Grotesk treatment */
+.font-heading {
+  font-family: var(--font-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COMPONENT STYLES
+   ═══════════════════════════════════════════════════════════ */
 
 /* ── Glass / hero panel ── */
 .glass-panel {
@@ -182,7 +284,11 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 80% 50% at 60% -10%, oklch(0.7 0.2 170 / 0.07) 0%, transparent 70%);
+  background: radial-gradient(
+    ellipse 80% 50% at 60% -10%,
+    oklch(0.7 0.2 170 / 0.07) 0%,
+    transparent 70%
+  );
   pointer-events: none;
 }
 
@@ -196,14 +302,47 @@ body {
   box-shadow: 0 4px 20px -4px oklch(0.7 0.2 170 / 0.12);
 }
 
-/* ── Prose markdown ── */
+/* ── Prose markdown (feed preview — compact) ── */
 .prose-feed p {
   margin: 0;
+  line-height: var(--leading-relaxed);
 }
 
 .prose-feed pre {
   overflow-x: auto;
   max-width: 100%;
+}
+
+/* ── Prose markdown (full thread body — reading mode) ──
+   Larger line-height and spacing for comfortable long-form reading.
+   Applied to the thread detail page body container.            */
+.prose-reading {
+  font-size: var(--text-base);
+  line-height: var(--leading-loose);
+  color: var(--foreground);
+}
+
+.prose-reading p {
+  margin-bottom: 1rem;
+}
+
+.prose-reading h1,
+.prose-reading h2,
+.prose-reading h3,
+.prose-reading h4 {
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-reading ul,
+.prose-reading ol {
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.prose-reading li {
+  margin-bottom: 0.25rem;
+  line-height: var(--leading-relaxed);
 }
 
 /* ── Scrollbar (webkit) ── */
@@ -229,10 +368,148 @@ body {
 :focus-visible {
   outline: 2px solid var(--neon);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ── Input date color fix for dark mode ── */
 .dark input[type="datetime-local"],
 .dark input[type="date"] {
   color-scheme: dark;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NEON GLOW EFFECTS
+   ═══════════════════════════════════════════════════════════ */
+
+.text-neon {
+  text-shadow: 0 0 8px oklch(0.7 0.2 170 / 0.4);
+  transition: text-shadow 200ms ease;
+}
+
+.dark .text-neon {
+  text-shadow: 0 0 12px oklch(0.7 0.2 170 / 0.6);
+}
+
+.border-neon,
+.focus\:border-neon:focus {
+  box-shadow: 0 0 8px oklch(0.7 0.2 170 / 0.15);
+  transition: box-shadow 200ms ease;
+}
+
+.dark .border-neon,
+.dark .focus\:border-neon:focus {
+  box-shadow: 0 0 10px oklch(0.7 0.2 170 / 0.25);
+}
+
+a:hover .text-neon,
+button:hover .text-neon {
+  text-shadow: 0 0 14px oklch(0.7 0.2 170 / 0.6);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MARKDOWN / CODE HIGHLIGHTING
+   ═══════════════════════════════════════════════════════════ */
+
+.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Dark mode syntax colors */
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-literal,
+.dark .hljs-section,
+.dark .hljs-link {
+  color: oklch(0.7 0.2 170); /* neon green — keywords */
+}
+
+.dark .hljs-string,
+.dark .hljs-title,
+.dark .hljs-name,
+.dark .hljs-type,
+.dark .hljs-attribute,
+.dark .hljs-symbol,
+.dark .hljs-bullet {
+  color: oklch(0.75 0.15 250); /* primary purple/blue — strings */
+}
+
+.dark .hljs-comment,
+.dark .hljs-doctag {
+  color: oklch(0.58 0.02 260); /* muted gray — comments */
+  font-style: italic;
+}
+
+.dark .hljs-number,
+.dark .hljs-built_in {
+  color: oklch(0.78 0.13 60); /* warm amber — numbers/builtins */
+}
+
+.dark .hljs-variable,
+.dark .hljs-params {
+  color: oklch(0.82 0.01 255); /* near-white — variables */
+}
+
+/* Light mode syntax colors */
+html:not(.dark) .hljs-keyword,
+html:not(.dark) .hljs-selector-tag,
+html:not(.dark) .hljs-literal {
+  color: oklch(0.42 0.18 170); /* darker neon — readable on white */
+}
+
+html:not(.dark) .hljs-string,
+html:not(.dark) .hljs-title,
+html:not(.dark) .hljs-name {
+  color: oklch(0.35 0.15 250);
+}
+
+html:not(.dark) .hljs-comment,
+html:not(.dark) .hljs-doctag {
+  color: oklch(0.52 0.02 260);
+  font-style: italic;
+}
+
+html:not(.dark) .hljs-number,
+html:not(.dark) .hljs-built_in {
+  color: oklch(0.55 0.15 50); /* warm amber, dark enough for light bg */
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ACCESSIBILITY UTILITIES
+   ═══════════════════════════════════════════════════════════ */
+
+/* Skip-to-content link (visible on keyboard focus only) */
+.sr-only:focus {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 9999;
+  clip: auto;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  white-space: nowrap;
+  background: var(--background);
+  color: var(--foreground);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--neon);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .thread-card:hover {
+    transform: none;
+  }
 }
