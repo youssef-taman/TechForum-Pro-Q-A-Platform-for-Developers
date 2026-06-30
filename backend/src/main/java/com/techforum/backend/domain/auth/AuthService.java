@@ -119,6 +119,14 @@ public class AuthService {
 
     String jwtToken = jwtUtil.generateToken(user.getUsername());
 
+    // Store token→username mapping for forced revocation
+    redisTemplate
+        .opsForValue()
+        .set(
+            "user-token:" + user.getUsername(),
+            jwtToken,
+            jwtUtil.extractExpiration(jwtToken).getTime() - System.currentTimeMillis(),
+            TimeUnit.MILLISECONDS);
     return AuthResponseDTO.builder()
         .username(user.getUsername())
         .email(user.getEmail())

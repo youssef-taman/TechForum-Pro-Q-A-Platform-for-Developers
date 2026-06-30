@@ -53,12 +53,7 @@ public class SecurityConfig {
   };
   private static final String[] ACTUATOR_WHITELIST = {"/actuator/**"};
   private static final List<String> ADMIN_ALLOWED_IPS =
-      List.of(
-          "127.0.0.1",
-          "0:0:0:0:0:0:0:1",
-          "45.241.81.130",
-          "156.217.78.190",
-          "156.217.7.141");
+      List.of("127.0.0.1", "0:0:0:0:0:0:0:1", "45.241.81.130", "156.217.78.190", "156.217.7.141");
   private final JwtAuthFilter jwtAuthFilter;
   private final String allowedOrigins;
 
