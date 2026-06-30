@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
@@ -158,5 +159,11 @@ public class NotificationController {
         emitters.remove(username);
       }
     }
+  }
+
+  @GetMapping("/unread-count")
+  public ResponseEntity<Map<String, Long>> getUnreadCount(Authentication authentication) {
+    long count = notificationService.getUnreadCount(authentication.getName());
+    return ResponseEntity.ok(Map.of("count", count));
   }
 }

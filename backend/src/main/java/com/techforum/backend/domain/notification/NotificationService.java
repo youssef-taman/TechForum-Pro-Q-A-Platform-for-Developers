@@ -42,8 +42,10 @@ public class NotificationService {
     notification.setLink(link);
 
     Notification saved = notificationRepository.save(notification);
-
-    // Return the DTO so controllers can push it to the SSE stream
     return notificationMapper.toDto(saved);
+  }
+
+  public long getUnreadCount(String username) {
+    return notificationRepository.countByRecipientUsernameAndIsReadFalse(username);
   }
 }
