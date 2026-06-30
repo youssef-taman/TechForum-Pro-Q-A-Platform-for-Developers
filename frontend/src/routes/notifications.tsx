@@ -1,9 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import type { Page } from "@/types";
-import { useEffect, useState } from "react";
-import { apiFetch, API_ENDPOINTS } from "@/lib/api";
-import { toast } from "sonner";
-import { Bell, BellOff, CheckCheck, ExternalLink, Loader2 } from "lucide-react";
+import {createFileRoute, Link} from "@tanstack/react-router";
+import type {Page} from "@/types";
+import {useEffect, useState} from "react";
+import {apiFetch, API_ENDPOINTS} from "@/lib/api";
+import {toast} from "sonner";
+import {Bell, BellOff, CheckCheck, ExternalLink, Loader2} from "lucide-react";
 
 type NotificationItem = {
   id: string;
@@ -43,7 +43,7 @@ function notificationIcon(type: string) {
 }
 
 export const Route = createFileRoute("/notifications")({
-  head: () => ({ meta: [{ title: "Notifications — TechForum Pro" }] }),
+  head: () => ({meta: [{title: "Notifications — TechForum Pro"}]}),
   component: NotificationsPage,
 });
 
@@ -69,11 +69,22 @@ function NotificationsPage() {
     void load();
   }, []);
 
+  const markOne = async (id: string) => {
+    try {
+      await apiFetch(API_ENDPOINTS.markNotificationRead(id), {method: "PATCH"});
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? {...n, isRead: true} : n)),
+      );
+    } catch {
+      // silent — not critical
+    }
+  };
+
   const markAll = async () => {
     setMarkingAll(true);
     try {
-      await apiFetch(API_ENDPOINTS.markAllNotificationsRead, { method: "PATCH" });
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      await apiFetch(API_ENDPOINTS.markAllNotificationsRead, {method: "PATCH"});
+      setNotifications((prev) => prev.map((n) => ({...n, isRead: true})));
       toast.success("All notifications marked as read");
     } catch {
       toast.error("Failed to mark all as read");
@@ -86,7 +97,6 @@ function NotificationsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -101,8 +111,8 @@ function NotificationsPage() {
               {loading
                 ? "Loading…"
                 : unreadCount > 0
-                ? `${unreadCount} unread`
-                : "All caught up"}
+                  ? `${unreadCount} unread`
+                  : "All caught up"}
             </p>
           </div>
         </div>
@@ -131,7 +141,9 @@ function NotificationsPage() {
       ) : notifications.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center">
           <BellOff className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
-          <p className="font-code text-sm font-medium text-foreground">No notifications yet</p>
+          <p className="font-code text-sm font-medium text-foreground">
+            No notifications yet
+          </p>
           <p className="mt-1 font-code text-xs text-muted-foreground">
             Activity on your questions and replies will appear here.
           </p>
@@ -164,7 +176,9 @@ function NotificationsPage() {
                 </div>
 
                 <div className="min-w-0 flex-1 pr-4">
-                  <p className={`text-sm leading-snug ${n.isRead ? "text-muted-foreground" : "font-medium text-foreground"}`}>
+                  <p
+                    className={`text-sm leading-snug ${n.isRead ? "text-muted-foreground" : "font-medium text-foreground"}`}
+                  >
                     {n.message}
                   </p>
                   <div className="mt-1.5 flex items-center gap-2 font-code text-[11px] text-muted-foreground">
@@ -185,11 +199,24 @@ function NotificationsPage() {
             );
 
             return n.link ? (
-              <Link key={n.id} to={n.link as never}>
+              <Link
+                key={n.id}
+                to={n.link as never}
+                onClick={() => {
+                  if (!n.isRead) void markOne(n.id);
+                }}
+              >
                 {inner}
               </Link>
             ) : (
-              <div key={n.id}>{inner}</div>
+              <div
+                key={n.id}
+                onClick={() => {
+                  if (!n.isRead) void markOne(n.id);
+                }}
+              >
+                {inner}
+              </div>
             );
           })}
         </div>
