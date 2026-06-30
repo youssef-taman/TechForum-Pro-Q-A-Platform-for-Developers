@@ -99,7 +99,9 @@ const TECHFORUM_AI_USERNAME = "TechForumAI";
 //
 // PENDING and CLOSED are never settable by the author.
 
-function getAuthorStatusOptions(current: ThreadStatus): {value: ThreadStatus; label: string}[] {
+function getAuthorStatusOptions(
+  current: ThreadStatus,
+): {value: ThreadStatus; label: string}[] {
   switch (current) {
     case "OPEN":
       return [{value: "RESOLVED", label: "Resolved — mark as solved"}];
@@ -113,10 +115,10 @@ function getAuthorStatusOptions(current: ThreadStatus): {value: ThreadStatus; la
 
 function getModStatusOptions(): {value: ThreadStatus; label: string}[] {
   return [
-    {value: "OPEN",     label: "Open"},
+    {value: "OPEN", label: "Open"},
     {value: "RESOLVED", label: "Resolved"},
-    {value: "CLOSED",   label: "Closed"},
-    {value: "PENDING",  label: "Pending"},
+    {value: "CLOSED", label: "Closed"},
+    {value: "PENDING", label: "Pending"},
   ];
 }
 
@@ -127,8 +129,12 @@ function StatusBanner({status}: {status: ThreadStatus}) {
       <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/8 px-4 py-3">
         <Lock className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
         <div className="font-code text-sm">
-          <span className="font-semibold text-destructive">This thread is closed.</span>
-          <span className="ml-1.5 text-muted-foreground">Commenting and voting are disabled.</span>
+          <span className="font-semibold text-destructive">
+            This thread is closed.
+          </span>
+          <span className="ml-1.5 text-muted-foreground">
+            Commenting and voting are disabled.
+          </span>
         </div>
       </div>
     );
@@ -138,8 +144,13 @@ function StatusBanner({status}: {status: ThreadStatus}) {
       <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
         <div className="font-code text-sm">
-          <span className="font-semibold text-amber-500">Awaiting moderation.</span>
-          <span className="ml-1.5 text-muted-foreground">This question is in the review queue and not yet visible to other users.</span>
+          <span className="font-semibold text-amber-500">
+            Awaiting moderation.
+          </span>
+          <span className="ml-1.5 text-muted-foreground">
+            This question is in the review queue and not yet visible to other
+            users.
+          </span>
         </div>
       </div>
     );
@@ -150,7 +161,9 @@ function StatusBanner({status}: {status: ThreadStatus}) {
         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
         <div className="font-code text-sm">
           <span className="font-semibold text-green-500">Resolved.</span>
-          <span className="ml-1.5 text-muted-foreground">The author marked this question as solved.</span>
+          <span className="ml-1.5 text-muted-foreground">
+            The author marked this question as solved.
+          </span>
         </div>
       </div>
     );
@@ -201,7 +214,10 @@ function updateCommentTree(
   );
 }
 
-function findCommentNode(nodes: CommentNode[], commentId: string): CommentNode | null {
+function findCommentNode(
+  nodes: CommentNode[],
+  commentId: string,
+): CommentNode | null {
   for (const node of nodes) {
     if (node.id === commentId) return node;
     const child = findCommentNode(node.replies, commentId);
@@ -210,13 +226,22 @@ function findCommentNode(nodes: CommentNode[], commentId: string): CommentNode |
   return null;
 }
 
-function removeCommentFromTree(nodes: CommentNode[], commentId: string): CommentNode[] {
+function removeCommentFromTree(
+  nodes: CommentNode[],
+  commentId: string,
+): CommentNode[] {
   return nodes
     .filter((node) => node.id !== commentId)
-    .map((node) => ({...node, replies: removeCommentFromTree(node.replies, commentId)}));
+    .map((node) => ({
+      ...node,
+      replies: removeCommentFromTree(node.replies, commentId),
+    }));
 }
 
-async function loadReplyTree(commentId: string, depth = 0): Promise<CommentNode[]> {
+async function loadReplyTree(
+  commentId: string,
+  depth = 0,
+): Promise<CommentNode[]> {
   if (depth > 10) return [];
   const pageSize = 100;
   const visited = new Set<string>();
@@ -254,17 +279,28 @@ async function loadCommentTree(
   return {tree, totalPages: data.totalPages};
 }
 
-function updateAncestorCounts(nodes: CommentNode[], targetId: string, delta: number): CommentNode[] {
+function updateAncestorCounts(
+  nodes: CommentNode[],
+  targetId: string,
+  delta: number,
+): CommentNode[] {
   let changed = false;
   const result = nodes.map((node) => {
     if (node.id === targetId) {
       changed = true;
-      return {...node, totalReplies: (node.totalReplies ?? node.replyCount) + delta};
+      return {
+        ...node,
+        totalReplies: (node.totalReplies ?? node.replyCount) + delta,
+      };
     }
     const updatedReplies = updateAncestorCounts(node.replies, targetId, delta);
     if (updatedReplies !== node.replies) {
       changed = true;
-      return {...node, replies: updatedReplies, totalReplies: (node.totalReplies ?? node.replyCount) + delta};
+      return {
+        ...node,
+        replies: updatedReplies,
+        totalReplies: (node.totalReplies ?? node.replyCount) + delta,
+      };
     }
     return node;
   });
@@ -321,12 +357,33 @@ function CommentCard({
   handlers: CommentHandlers;
 }) {
   const {
-    votedComments, votingComments, handleVote, expandedReplies, loadingReplies,
-    toggleReplies, replyingTo, setReplyingTo, replyText, setReplyText, submitReply,
-    editingCommentId, editingCommentContent, setEditingCommentContent,
-    startEditingComment, setEditingCommentId, saveComment, savingComment,
-    setCommentDeleteId, isLoggedIn, user, canEditComment, canDeleteComment,
-    isAiComment, threadClosed,
+    votedComments,
+    votingComments,
+    handleVote,
+    expandedReplies,
+    loadingReplies,
+    toggleReplies,
+    replyingTo,
+    setReplyingTo,
+    replyText,
+    setReplyText,
+    submitReply,
+    editingCommentId,
+    editingCommentContent,
+    setEditingCommentContent,
+    startEditingComment,
+    setEditingCommentId,
+    saveComment,
+    savingComment,
+    setCommentDeleteId,
+    isLoggedIn,
+    user,
+    canEditComment,
+    canDeleteComment,
+    isAiComment,
+    threadClosed,
+    canComment,
+    canVote,
   } = handlers;
 
   const myVote = votedComments[comment.id];
@@ -351,11 +408,15 @@ function CommentCard({
       <div className="flex items-start gap-3">
         {/* Avatar */}
         {aiComment ? (
-          <div className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-500`}>
+          <div
+            className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-500`}
+          >
             <Bot className={depth === 0 ? "h-4 w-4" : "h-3.5 w-3.5"} />
           </div>
         ) : (
-          <div className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-muted-foreground`}>
+          <div
+            className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-muted-foreground`}
+          >
             <UserIcon className={depth === 0 ? "h-4 w-4" : "h-3 w-3"} />
           </div>
         )}
@@ -364,34 +425,52 @@ function CommentCard({
         <div className="flex flex-col items-center gap-1 pt-0.5">
           <button
             onClick={() => handleVote(comment.id, "UPVOTE")}
-            disabled={votingComments[comment.id] || ownComment || threadClosed}
-            title={ownComment ? "Cannot vote your own comment" : threadClosed ? "Thread is closed" : "Upvote"}
+            disabled={votingComments[comment.id] || ownComment || !canVote}
+            title={
+              ownComment
+                ? "Cannot vote your own comment"
+                : !canVote
+                  ? "Voting is disabled on this thread"
+                  : "Upvote"
+            }
             aria-pressed={myVote === "UPVOTE"}
             aria-label="Upvote"
             className={`flex ${voteButtonSize} items-center justify-center rounded-full border transition-colors ${
               myVote === "UPVOTE"
                 ? "border-neon bg-neon/10 text-neon"
                 : "border-border text-muted-foreground hover:border-neon hover:text-neon"
-            } ${ownComment || threadClosed ? "cursor-not-allowed opacity-40" : ""}`}
+            } ${ownComment || !canVote ? "cursor-not-allowed opacity-40" : ""}`}
           >
             <ThumbsUp className={voteIconSize} />
           </button>
-          <span className={`font-code font-bold ${scoreClass} ${
-            comment.score > 0 ? "text-neon" : comment.score < 0 ? "text-destructive" : "text-muted-foreground"
-          }`}>
+          <span
+            className={`font-code font-bold ${scoreClass} ${
+              comment.score > 0
+                ? "text-neon"
+                : comment.score < 0
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+            }`}
+          >
             {comment.score}
           </span>
           <button
             onClick={() => handleVote(comment.id, "DOWNVOTE")}
-            disabled={votingComments[comment.id] || ownComment || threadClosed}
-            title={ownComment ? "Cannot vote your own comment" : threadClosed ? "Thread is closed" : "Downvote"}
+            disabled={votingComments[comment.id] || ownComment || !canVote}
+            title={
+              ownComment
+                ? "Cannot vote your own comment"
+                : !canVote
+                  ? "Voting is disabled on this thread"
+                  : "Downvote"
+            }
             aria-pressed={myVote === "DOWNVOTE"}
             aria-label="Downvote"
             className={`flex ${voteButtonSize} items-center justify-center rounded-full border transition-colors ${
               myVote === "DOWNVOTE"
                 ? "border-destructive bg-destructive/10 text-destructive"
                 : "border-border text-muted-foreground hover:border-destructive hover:text-destructive"
-            } ${ownComment || threadClosed ? "cursor-not-allowed opacity-40" : ""}`}
+            } ${ownComment || !canVote ? "cursor-not-allowed opacity-40" : ""}`}
           >
             <ThumbsDown className={voteIconSize} />
           </button>
@@ -400,7 +479,9 @@ function CommentCard({
         {/* Body */}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 font-code text-[11px]">
-            <span className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}>
+            <span
+              className={`font-medium ${aiComment ? "text-cyan-500" : "text-neon"}`}
+            >
               @{comment.authorName}
             </span>
             {aiComment && (
@@ -410,14 +491,18 @@ function CommentCard({
               </span>
             )}
             <span className="text-muted-foreground/40">·</span>
-            <span className="text-muted-foreground">{relativeTime(comment.createdAt)}</span>
+            <span className="text-muted-foreground">
+              {relativeTime(comment.createdAt)}
+            </span>
             {(comment.totalReplies ?? comment.replyCount) > 0 && (
               <span className="text-muted-foreground/60">
                 {comment.totalReplies ?? comment.replyCount} replies
               </span>
             )}
             {comment.parentId && (
-              <span className="rounded bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground">reply</span>
+              <span className="rounded bg-surface px-1.5 py-0.5 font-code text-[10px] text-muted-foreground">
+                reply
+              </span>
             )}
             {(canEditComment(comment) || canDeleteComment(comment)) && (
               <span className="ml-auto flex items-center gap-1">
@@ -478,9 +563,11 @@ function CommentCard({
           )}
 
           {/* Reply button — hidden when thread is closed */}
-          {isLoggedIn && depth < MAX_DEPTH && !threadClosed && (
+          {isLoggedIn && depth < MAX_DEPTH && canComment && (
             <button
-              onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+              onClick={() =>
+                setReplyingTo(replyingTo === comment.id ? null : comment.id)
+              }
               className="mt-1.5 font-code text-[11px] text-muted-foreground hover:text-neon transition-colors"
             >
               {replyingTo === comment.id ? "Cancel" : "↳ Reply"}
@@ -488,7 +575,7 @@ function CommentCard({
           )}
 
           {/* Inline reply input */}
-          {replyingTo === comment.id && !threadClosed && (
+          {replyingTo === comment.id && canComment && (
             <div className="mt-2 flex gap-2">
               <input
                 value={replyText}
@@ -531,9 +618,13 @@ function CommentCard({
                       Loading replies…
                     </div>
                   ) : comment.replies.length === 0 ? (
-                    <p className="font-code text-[11px] text-muted-foreground">No replies yet.</p>
+                    <p className="font-code text-[11px] text-muted-foreground">
+                      No replies yet.
+                    </p>
                   ) : (
-                    <div className={`space-y-3 border-l-2 pl-3 ${depth === 0 ? "border-neon/20 ml-1" : "border-border/40 ml-0.5"}`}>
+                    <div
+                      className={`space-y-3 border-l-2 pl-3 ${depth === 0 ? "border-neon/20 ml-1" : "border-border/40 ml-0.5"}`}
+                    >
                       {comment.replies.map((reply) => (
                         <CommentCard
                           key={reply.id}
@@ -587,7 +678,9 @@ function QuestionDetail() {
   const [thread, setThread] = useState<Thread | null>(null);
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [commentsPage, setCommentsPage] = useState(0);
-  const [commentSort, setCommentSort] = useState<"latest" | "oldest" | "top">("latest");
+  const [commentSort, setCommentSort] = useState<"latest" | "oldest" | "top">(
+    "latest",
+  );
   const [totalCommentPages, setTotalCommentPages] = useState(1);
   const [loadingThread, setLoadingThread] = useState(true);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -599,10 +692,18 @@ function QuestionDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
-  const [votedComments, setVotedComments] = useState<Record<string, "UPVOTE" | "DOWNVOTE">>({});
-  const [votingComments, setVotingComments] = useState<Record<string, boolean>>({});
-  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
-  const [loadingReplies, setLoadingReplies] = useState<Record<string, boolean>>({});
+  const [votedComments, setVotedComments] = useState<
+    Record<string, "UPVOTE" | "DOWNVOTE">
+  >({});
+  const [votingComments, setVotingComments] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [expandedReplies, setExpandedReplies] = useState<
+    Record<string, boolean>
+  >({});
+  const [loadingReplies, setLoadingReplies] = useState<Record<string, boolean>>(
+    {},
+  );
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
   const [commentDeleteId, setCommentDeleteId] = useState<string | null>(null);
@@ -627,18 +728,23 @@ function QuestionDetail() {
   const canDeleteThread = isLoggedIn && (isThreadOwner || isPrivileged);
   const threadClosed = thread?.status === "CLOSED";
   const threadPending = thread?.status === "PENDING";
+  const threadResolved = thread?.status === "RESOLVED";
+  const canComment = isPrivileged || thread?.status === "OPEN";
+  const canVote = thread?.status === "OPEN" || thread?.status === "RESOLVED";
 
   // What status options the current user can choose in the edit dialog
   const availableStatusOptions = isPrivileged
     ? getModStatusOptions()
     : isThreadOwner && thread
-    ? getAuthorStatusOptions(thread.status)
-    : [];
+      ? getAuthorStatusOptions(thread.status)
+      : [];
 
   const canEditComment = (comment: Comment) =>
     isLoggedIn && !!user && comment.authorName === user.username;
   const canDeleteComment = (comment: Comment) =>
-    isLoggedIn && !!user && (comment.authorName === user.username || isPrivileged);
+    isLoggedIn &&
+    !!user &&
+    (comment.authorName === user.username || isPrivileged);
   const isAiComment = (comment: Comment) =>
     comment.authorName === TECHFORUM_AI_USERNAME;
 
@@ -663,7 +769,9 @@ function QuestionDetail() {
           : "Question reopened.",
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update status");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update status",
+      );
     } finally {
       setMarkingStatus(false);
     }
@@ -676,7 +784,8 @@ function QuestionDetail() {
       !nextExpanded ||
       (comment.totalReplies ?? comment.replyCount) === 0 ||
       comment.replies.length > 0
-    ) return;
+    )
+      return;
     setLoadingReplies((current) => ({...current, [comment.id]: true}));
     try {
       const replies = await loadReplyTree(comment.id);
@@ -689,7 +798,11 @@ function QuestionDetail() {
         });
       } else {
         setComments((current) =>
-          updateCommentTree(current, comment.id, (node) => ({...node, replies, totalReplies})),
+          updateCommentTree(current, comment.id, (node) => ({
+            ...node,
+            replies,
+            totalReplies,
+          })),
         );
       }
       setVotedComments((current) => ({...current, ...replyVotes}));
@@ -786,14 +899,18 @@ function QuestionDetail() {
       );
       setComments((prev) =>
         updateCommentTree(prev, editingCommentId, (comment) => ({
-          ...comment, ...updated, replies: comment.replies,
+          ...comment,
+          ...updated,
+          replies: comment.replies,
         })),
       );
       setEditingCommentId(null);
       setEditingCommentContent("");
       toast.success("Comment updated");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update comment");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update comment",
+      );
     } finally {
       setSavingComment(false);
     }
@@ -803,20 +920,30 @@ function QuestionDetail() {
     if (!commentDeleteId) return;
     setDeletingComment(true);
     try {
-      const res = await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), {method: "DELETE"});
+      const res = await apiFetch(API_ENDPOINTS.commentById(commentDeleteId), {
+        method: "DELETE",
+      });
       if (res === null || res.ok) {
         const nodeToDelete = findCommentNode(comments, commentDeleteId);
-        const removedCount = nodeToDelete ? 1 + countDescendants(nodeToDelete.replies) : 1;
+        const removedCount = nodeToDelete
+          ? 1 + countDescendants(nodeToDelete.replies)
+          : 1;
         setComments((prev) => {
           const removed = removeCommentFromTree(prev, commentDeleteId);
           return updateAncestorCounts(removed, commentDeleteId, -removedCount);
         });
-        if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments - removedCount}));
+        if (thread)
+          setThread((t) => ({
+            ...(t as Thread),
+            numberComments: t.numberComments - removedCount,
+          }));
       }
       toast.success("Comment deleted");
       setCommentDeleteId(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete comment");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete comment",
+      );
     } finally {
       setDeletingComment(false);
     }
@@ -828,7 +955,8 @@ function QuestionDetail() {
       if (!silent) setLoadingComments(true);
       try {
         const data = await loadCommentTree(id, commentsPage, commentSort);
-        const {nodes: newTopLevelNodes, aiComment: nextAiComment} = extractAiComment(data.tree);
+        const {nodes: newTopLevelNodes, aiComment: nextAiComment} =
+          extractAiComment(data.tree);
         setComments((prevComments) => {
           return newTopLevelNodes.map((newNode) => {
             const existingNode = prevComments.find((n) => n.id === newNode.id);
@@ -840,7 +968,10 @@ function QuestionDetail() {
               return {
                 ...newNode,
                 replies: existingNode.replies,
-                totalReplies: Math.max(backendCount, existingNode.replies.length),
+                totalReplies: Math.max(
+                  backendCount,
+                  existingNode.replies.length,
+                ),
               };
             }
             return newNode;
@@ -849,7 +980,8 @@ function QuestionDetail() {
         setAiComment((prevAiComment) => {
           if (!prevAiComment || !nextAiComment) return nextAiComment;
           if (prevAiComment.id !== nextAiComment.id) return nextAiComment;
-          const backendCount = nextAiComment.totalReplies ?? nextAiComment.replyCount;
+          const backendCount =
+            nextAiComment.totalReplies ?? nextAiComment.replyCount;
           if (backendCount < prevAiComment.replies.length) {
             return {...nextAiComment, replies: [], totalReplies: backendCount};
           }
@@ -879,8 +1011,14 @@ function QuestionDetail() {
     let pollInFlight = false;
 
     const stopPolling = () => {
-      if (pollingInterval !== null) { window.clearInterval(pollingInterval); pollingInterval = null; }
-      if (timeoutId !== null) { window.clearTimeout(timeoutId); timeoutId = null; }
+      if (pollingInterval !== null) {
+        window.clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     };
 
     const startPolling = async () => {
@@ -909,7 +1047,10 @@ function QuestionDetail() {
     };
 
     void startPolling();
-    return () => { cancelled = true; stopPolling(); };
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
   }, [id, commentsPage, commentSort, reloadComments]);
 
   useEffect(() => {
@@ -918,11 +1059,17 @@ function QuestionDetail() {
       try {
         let threadData: Thread;
         if (author) {
-          threadData = await apiFetch<Thread>(API_ENDPOINTS.threadExpand(author, id));
+          threadData = await apiFetch<Thread>(
+            API_ENDPOINTS.threadExpand(author, id),
+          );
         } else {
           threadData = await apiFetch<Thread>(API_ENDPOINTS.threadById(id));
         }
-        setThread({...threadData, body: threadData.body ?? "", tags: threadData.tags ?? []});
+        setThread({
+          ...threadData,
+          body: threadData.body ?? "",
+          tags: threadData.tags ?? [],
+        });
       } catch {
         toast.error("Failed to load thread");
       } finally {
@@ -956,11 +1103,16 @@ function QuestionDetail() {
       }
     };
     loadBookmarks();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [id, isLoggedIn]);
 
   const handleBookmark = async () => {
-    if (!isLoggedIn) { toast.error("Please log in to bookmark"); return; }
+    if (!isLoggedIn) {
+      toast.error("Please log in to bookmark");
+      return;
+    }
     try {
       if (bookmarked) {
         await apiFetch(API_ENDPOINTS.bookmarkThread(id), {method: "DELETE"});
@@ -977,28 +1129,52 @@ function QuestionDetail() {
   };
 
   const submitComment = async () => {
-    if (!isLoggedIn) { toast.error("Please log in to comment"); return; }
-    if (newComment.trim().length < 5) { toast.error("Comment too short"); return; }
+    if (!isLoggedIn) {
+      toast.error("Please log in to comment");
+      return;
+    }
+    if (!canComment) {
+      toast.error("Commenting is disabled on this thread");
+      return;
+    }
+    if (newComment.trim().length < 5) {
+      toast.error("Comment too short");
+      return;
+    }
     const tempId =
       typeof globalThis.crypto?.randomUUID === "function"
         ? globalThis.crypto.randomUUID()
         : `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tempComment: CommentNode = {
-      id: tempId, parentId: null, threadId: id,
-      authorName: user?.username ?? "You", content: newComment.trim(),
-      replyCount: 0, totalReplies: 0, score: 0,
-      createdAt: new Date().toISOString(), replies: [],
+      id: tempId,
+      parentId: null,
+      threadId: id,
+      authorName: user?.username ?? "You",
+      content: newComment.trim(),
+      replyCount: 0,
+      totalReplies: 0,
+      score: 0,
+      createdAt: new Date().toISOString(),
+      replies: [],
     };
     const prevComments = comments;
     const prevThread = thread;
     setComments((cur) => [tempComment, ...cur]);
-    if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments + 1}));
+    if (thread)
+      setThread((t) => ({
+        ...(t as Thread),
+        numberComments: t.numberComments + 1,
+      }));
     setNewComment("");
     setSubmitting(true);
     try {
       await apiFetch<Comment>(API_ENDPOINTS.commentsBase, {
         method: "POST",
-        body: JSON.stringify({threadId: id, content: tempComment.content, parentId: null}),
+        body: JSON.stringify({
+          threadId: id,
+          content: tempComment.content,
+          parentId: null,
+        }),
       });
       toast.success("Comment posted");
       await reloadComments();
@@ -1013,16 +1189,34 @@ function QuestionDetail() {
   };
 
   const submitReply = async (parentId: string) => {
-    if (!isLoggedIn) { toast.error("Please log in"); return; }
-    if (replyText.trim().length < 5) { toast.error("Reply too short"); return; }
+    if (!isLoggedIn) {
+      toast.error("Please log in");
+      return;
+    }
+    if (!canComment) {
+      toast.error("Commenting is disabled on this thread");
+      return;
+    }
+    if (replyText.trim().length < 5) {
+      toast.error("Reply too short");
+      return;
+    }
     const prevComments = comments;
     const prevThread = thread;
     setComments((cur) => updateAncestorCounts(cur, parentId, 1));
-    if (thread) setThread((t) => ({...(t as Thread), numberComments: t.numberComments + 1}));
+    if (thread)
+      setThread((t) => ({
+        ...(t as Thread),
+        numberComments: t.numberComments + 1,
+      }));
     try {
       await apiFetch<Comment>(API_ENDPOINTS.commentsBase, {
         method: "POST",
-        body: JSON.stringify({threadId: id, content: replyText.trim(), parentId}),
+        body: JSON.stringify({
+          threadId: id,
+          content: replyText.trim(),
+          parentId,
+        }),
       });
       setReplyingTo(null);
       setReplyText("");
@@ -1038,10 +1232,15 @@ function QuestionDetail() {
   const handleVote = async (commentId: string, type: "UPVOTE" | "DOWNVOTE") => {
     const updateAiCommentScore = (delta: number) => {
       setAiComment((current: CommentNode | null) =>
-        current && current.id === commentId ? {...current, score: current.score + delta} : current,
+        current && current.id === commentId
+          ? {...current, score: current.score + delta}
+          : current,
       );
     };
-    if (!isLoggedIn) { toast.error("Please log in to vote"); return; }
+    if (!isLoggedIn) {
+      toast.error("Please log in to vote");
+      return;
+    }
     if (votingComments[commentId]) return;
     const target = findCommentNode(comments, commentId);
     if (target && user && target.authorName === user.username) {
@@ -1052,14 +1251,31 @@ function QuestionDetail() {
     setVotingComments((current) => ({...current, [commentId]: true}));
     if (prev === type) {
       const revertDelta = type === "UPVOTE" ? -1 : 1;
-      setVotedComments((current) => { const c = {...current}; delete c[commentId]; return c; });
-      setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score + revertDelta})));
+      setVotedComments((current) => {
+        const c = {...current};
+        delete c[commentId];
+        return c;
+      });
+      setComments((current) =>
+        updateCommentTree(current, commentId, (c) => ({
+          ...c,
+          score: c.score + revertDelta,
+        })),
+      );
       updateAiCommentScore(revertDelta);
       try {
-        await apiFetch(API_ENDPOINTS.voteComment(commentId), {method: "POST", body: JSON.stringify({type})});
+        await apiFetch(API_ENDPOINTS.voteComment(commentId), {
+          method: "POST",
+          body: JSON.stringify({type}),
+        });
       } catch (err) {
         setVotedComments((current) => ({...current, [commentId]: prev}));
-        setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score - revertDelta})));
+        setComments((current) =>
+          updateCommentTree(current, commentId, (c) => ({
+            ...c,
+            score: c.score - revertDelta,
+          })),
+        );
         updateAiCommentScore(-revertDelta);
         toast.error(err instanceof Error ? err.message : "Vote failed");
       } finally {
@@ -1067,21 +1283,39 @@ function QuestionDetail() {
       }
       return;
     }
-    const oldContribution = prev === "UPVOTE" ? 1 : prev === "DOWNVOTE" ? -1 : 0;
+    const oldContribution =
+      prev === "UPVOTE" ? 1 : prev === "DOWNVOTE" ? -1 : 0;
     const newContribution = type === "UPVOTE" ? 1 : -1;
     const delta = newContribution - oldContribution;
     setVotedComments((current) => ({...current, [commentId]: type}));
-    setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score + delta})));
+    setComments((current) =>
+      updateCommentTree(current, commentId, (c) => ({
+        ...c,
+        score: c.score + delta,
+      })),
+    );
     updateAiCommentScore(delta);
     try {
-      await apiFetch(API_ENDPOINTS.voteComment(commentId), {method: "POST", body: JSON.stringify({type})});
+      await apiFetch(API_ENDPOINTS.voteComment(commentId), {
+        method: "POST",
+        body: JSON.stringify({type}),
+      });
     } catch (err) {
       if (prev === null) {
-        setVotedComments((current) => { const c = {...current}; delete c[commentId]; return c; });
+        setVotedComments((current) => {
+          const c = {...current};
+          delete c[commentId];
+          return c;
+        });
       } else {
         setVotedComments((current) => ({...current, [commentId]: prev}));
       }
-      setComments((current) => updateCommentTree(current, commentId, (c) => ({...c, score: c.score - delta})));
+      setComments((current) =>
+        updateCommentTree(current, commentId, (c) => ({
+          ...c,
+          score: c.score - delta,
+        })),
+      );
       updateAiCommentScore(-delta);
       toast.error(err instanceof Error ? err.message : "Vote failed");
     } finally {
@@ -1090,11 +1324,33 @@ function QuestionDetail() {
   };
 
   const commentHandlers: CommentHandlers = {
-    votedComments, votingComments, handleVote, expandedReplies, loadingReplies,
-    toggleReplies, replyingTo, setReplyingTo, replyText, setReplyText, submitReply,
-    editingCommentId, editingCommentContent, setEditingCommentContent, startEditingComment,
-    setEditingCommentId, saveComment, savingComment, setCommentDeleteId, isLoggedIn, user,
-    canEditComment, canDeleteComment, isAiComment, threadClosed,
+    votedComments,
+    votingComments,
+    handleVote,
+    expandedReplies,
+    loadingReplies,
+    toggleReplies,
+    replyingTo,
+    setReplyingTo,
+    replyText,
+    setReplyText,
+    submitReply,
+    editingCommentId,
+    editingCommentContent,
+    setEditingCommentContent,
+    startEditingComment,
+    setEditingCommentId,
+    saveComment,
+    savingComment,
+    setCommentDeleteId,
+    isLoggedIn,
+    user,
+    canEditComment,
+    canDeleteComment,
+    isAiComment,
+    threadClosed,
+    canComment,
+    canVote,
   };
 
   const showAiSkeleton = pollingForAiComment && !aiComment && !pollingTimedOut;
@@ -1104,7 +1360,9 @@ function QuestionDetail() {
       <div className="flex items-center justify-center py-32">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-neon" />
-          <span className="font-code text-xs text-muted-foreground">Loading thread…</span>
+          <span className="font-code text-xs text-muted-foreground">
+            Loading thread…
+          </span>
         </div>
       </div>
     );
@@ -1114,18 +1372,25 @@ function QuestionDetail() {
     return (
       <div className="py-20 text-center font-code text-sm text-muted-foreground">
         Thread not found.{" "}
-        <Link to="/" className="text-neon hover:underline">← Back to feed</Link>
+        <Link to="/" className="text-neon hover:underline">
+          ← Back to feed
+        </Link>
       </div>
     );
   }
 
   // ── Which quick-action to show the author ────────────────────────────────
-  const authorActions = isThreadOwner ? getAuthorStatusOptions(thread.status) : [];
+  const authorActions = isThreadOwner
+    ? getAuthorStatusOptions(thread.status)
+    : [];
 
   return (
     <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_360px]">
       <section className="min-w-0 space-y-6">
-        <Link to="/" className="inline-flex items-center gap-1.5 font-code text-xs text-muted-foreground hover:text-neon transition-colors">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 font-code text-xs text-muted-foreground hover:text-neon transition-colors"
+        >
           <ArrowLeft className="h-3 w-3" /> Back to feed
         </Link>
 
@@ -1161,7 +1426,9 @@ function QuestionDetail() {
           <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-border pt-5 font-code text-sm">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <UserIcon className="h-3 w-3" />
-              <span className="text-neon font-medium">@{thread.authorName}</span>
+              <span className="text-neon font-medium">
+                @{thread.authorName}
+              </span>
             </div>
             <span className="text-muted-foreground/40">·</span>
             <div className="flex items-center gap-1 text-muted-foreground">
@@ -1171,7 +1438,8 @@ function QuestionDetail() {
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {/* ── Author quick-action: Mark Resolved / Re-open ── */}
-              {isThreadOwner && authorActions.length > 0 && (
+              {isThreadOwner &&
+                authorActions.length > 0 &&
                 authorActions.map(({value, label}) => (
                   <button
                     key={value}
@@ -1192,8 +1460,7 @@ function QuestionDetail() {
                     )}
                     {markingStatus ? "Updating…" : label.split(" — ")[0]}
                   </button>
-                ))
-              )}
+                ))}
 
               {/* ── Mod indicator (no quick-action; use Edit dialog) ── */}
               {isPrivileged && (
@@ -1266,7 +1533,10 @@ function QuestionDetail() {
             <div className="space-y-5">
               {/* Title */}
               <div>
-                <label htmlFor="edit-title" className="mb-1.5 block font-code text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-title"
+                  className="mb-1.5 block font-code text-sm font-medium text-foreground"
+                >
                   Title
                 </label>
                 <input
@@ -1279,7 +1549,10 @@ function QuestionDetail() {
 
               {/* Body */}
               <div>
-                <label htmlFor="edit-body" className="mb-1.5 block font-code text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-body"
+                  className="mb-1.5 block font-code text-sm font-medium text-foreground"
+                >
                   Body
                 </label>
                 <textarea
@@ -1305,7 +1578,9 @@ function QuestionDetail() {
                   <>
                     <Select
                       value={editStatus}
-                      onValueChange={(value) => setEditStatus(value as ThreadStatus)}
+                      onValueChange={(value) =>
+                        setEditStatus(value as ThreadStatus)
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select status" />
@@ -1313,7 +1588,9 @@ function QuestionDetail() {
                       <SelectContent>
                         {/* Always show current status as first option */}
                         <SelectItem value={thread.status}>
-                          {thread.status.charAt(0) + thread.status.slice(1).toLowerCase()} (current)
+                          {thread.status.charAt(0) +
+                            thread.status.slice(1).toLowerCase()}{" "}
+                          (current)
                         </SelectItem>
                         {availableStatusOptions
                           .filter((opt) => opt.value !== thread.status)
@@ -1327,7 +1604,8 @@ function QuestionDetail() {
                     {!isPrivileged && (
                       <p className="mt-1.5 flex items-center gap-1.5 font-code text-xs text-muted-foreground">
                         <AlertCircle className="h-3 w-3 shrink-0" />
-                        You can only mark your question as resolved or reopen it.
+                        You can only mark your question as resolved or reopen
+                        it.
                       </p>
                     )}
                   </>
@@ -1374,11 +1652,17 @@ function QuestionDetail() {
                         e.preventDefault();
                         addEditTag();
                       }
-                      if (e.key === "Backspace" && !editTagInput && editTags.length > 0) {
+                      if (
+                        e.key === "Backspace" &&
+                        !editTagInput &&
+                        editTags.length > 0
+                      ) {
                         removeEditTag(editTags[editTags.length - 1]);
                       }
                     }}
-                    placeholder={editTags.length === 0 ? "Type a tag and press Enter…" : ""}
+                    placeholder={
+                      editTags.length === 0 ? "Type a tag and press Enter…" : ""
+                    }
                     className="min-w-32 flex-1 bg-transparent px-2 py-1 font-code text-xs focus:outline-none"
                   />
                 </div>
@@ -1411,11 +1695,14 @@ function QuestionDetail() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this post?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently remove the thread and all of its comments. This cannot be undone.
+                This will permanently remove the thread and all of its comments.
+                This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={deletingThread}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={deletingThread}>
+                Cancel
+              </AlertDialogCancel>
               <AlertDialogAction
                 disabled={deletingThread}
                 onClick={(event) => {
@@ -1475,14 +1762,24 @@ function QuestionDetail() {
                     <Sparkles className="h-3 w-3" />
                     TechForum AI answer
                   </div>
-                  <CommentCard key={aiComment.id} comment={aiComment} depth={0} handlers={commentHandlers} />
+                  <CommentCard
+                    key={aiComment.id}
+                    comment={aiComment}
+                    depth={0}
+                    handlers={commentHandlers}
+                  />
                 </div>
               ) : showAiSkeleton ? (
                 <AiCommentSkeleton />
               ) : null}
 
               {comments.map((comment) => (
-                <CommentCard key={comment.id} comment={comment} depth={0} handlers={commentHandlers} />
+                <CommentCard
+                  key={comment.id}
+                  comment={comment}
+                  depth={0}
+                  handlers={commentHandlers}
+                />
               ))}
             </div>
           )}
@@ -1490,7 +1787,9 @@ function QuestionDetail() {
           {/* Comment delete dialog */}
           <AlertDialog
             open={commentDeleteId !== null}
-            onOpenChange={(open) => { if (!open) setCommentDeleteId(null); }}
+            onOpenChange={(open) => {
+              if (!open) setCommentDeleteId(null);
+            }}
           >
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -1500,7 +1799,9 @@ function QuestionDetail() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={deletingComment}>Cancel</AlertDialogCancel>
+                <AlertDialogCancel disabled={deletingComment}>
+                  Cancel
+                </AlertDialogCancel>
                 <AlertDialogAction
                   disabled={deletingComment}
                   onClick={(event) => {
@@ -1525,7 +1826,9 @@ function QuestionDetail() {
               >
                 ← Prev
               </button>
-              <span className="text-muted-foreground">{commentsPage + 1} / {totalCommentPages}</span>
+              <span className="text-muted-foreground">
+                {commentsPage + 1} / {totalCommentPages}
+              </span>
               <button
                 disabled={commentsPage >= totalCommentPages - 1}
                 onClick={() => setCommentsPage((p) => p + 1)}
@@ -1539,12 +1842,49 @@ function QuestionDetail() {
           {/* Add comment — hidden when CLOSED */}
           <div className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h3 className="mb-3 font-code text-sm font-semibold text-foreground">
-              {isLoggedIn ? `Comment as @${user?.username}` : "Add a comment"}
+              {isLoggedIn && canComment
+                ? `Comment as @${user?.username}`
+                : "Add a comment"}
             </h3>
             {threadClosed ? (
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-4 py-3 font-code text-xs text-muted-foreground">
-                <Lock className="h-3.5 w-3.5 shrink-0" />
-                This thread is closed. Commenting is disabled.
+              <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/8 px-4 py-3 font-code text-sm text-destructive">
+                <Lock className="h-4 w-4 shrink-0" />
+                <span>
+                  <span className="font-semibold">Thread closed.</span>
+                  <span className="ml-1.5 text-muted-foreground">
+                    Commenting and replies are permanently disabled.
+                  </span>
+                </span>
+              </div>
+            ) : threadResolved && !isPrivileged ? (
+              <div className="flex items-center gap-3 rounded-lg border border-green-500/30 bg-green-500/8 px-4 py-3 font-code text-sm text-green-600 dark:text-green-400">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>
+                  <span className="font-semibold">Thread resolved.</span>
+                  <span className="ml-1.5 text-muted-foreground">
+                    This question has been marked as solved.{" "}
+                    {isThreadOwner && (
+                      <span>
+                        You can re-open it from the button above if the solution
+                        didn&apos;t hold.
+                      </span>
+                    )}
+                    {!isThreadOwner && (
+                      <span>Commenting is disabled on resolved threads.</span>
+                    )}
+                  </span>
+                </span>
+              </div>
+            ) : threadPending && !isPrivileged ? (
+              <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3 font-code text-sm text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>
+                  <span className="font-semibold">Awaiting moderation.</span>
+                  <span className="ml-1.5 text-muted-foreground">
+                    Commenting is disabled until a moderator approves this
+                    thread.
+                  </span>
+                </span>
               </div>
             ) : isLoggedIn ? (
               <>
@@ -1558,7 +1898,9 @@ function QuestionDetail() {
                 <div className="mt-3 flex items-center justify-between">
                   <span className="font-code text-[11px] text-muted-foreground">
                     {newComment.length} chars{" "}
-                    {newComment.length < 5 && newComment.length > 0 && "· min 5"}
+                    {newComment.length < 5 &&
+                      newComment.length > 0 &&
+                      "· min 5"}
                   </span>
                   <button
                     onClick={submitComment}
@@ -1572,7 +1914,9 @@ function QuestionDetail() {
               </>
             ) : (
               <p className="font-code text-xs text-muted-foreground">
-                <Link to="/login" className="text-neon hover:underline">Log in</Link>{" "}
+                <Link to="/login" className="text-neon hover:underline">
+                  Log in
+                </Link>{" "}
                 to post a comment.
               </p>
             )}
@@ -1588,30 +1932,48 @@ function QuestionDetail() {
           </h3>
           <dl className="space-y-3 font-code text-xs">
             <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Status</dt>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">
+                Status
+              </dt>
               <dd className="mt-1 flex items-center gap-2">
                 <StatusBadge status={thread.status} />
                 {/* Inline hint for PENDING so the author understands what happens next */}
                 {threadPending && isThreadOwner && (
-                  <span className="text-[10px] text-amber-500">awaiting mod review</span>
+                  <span className="text-[10px] text-amber-500">
+                    awaiting mod review
+                  </span>
                 )}
               </dd>
             </div>
             <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Author</dt>
-              <dd className="mt-1 font-medium text-neon">@{thread.authorName}</dd>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">
+                Author
+              </dt>
+              <dd className="mt-1 font-medium text-neon">
+                @{thread.authorName}
+              </dd>
             </div>
             <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Posted</dt>
-              <dd className="mt-1 text-muted-foreground">{relativeTime(thread.createdAt)}</dd>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">
+                Posted
+              </dt>
+              <dd className="mt-1 text-muted-foreground">
+                {relativeTime(thread.createdAt)}
+              </dd>
             </div>
             <div>
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Comments</dt>
-              <dd className="mt-1 text-muted-foreground">{thread.numberComments}</dd>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">
+                Comments
+              </dt>
+              <dd className="mt-1 text-muted-foreground">
+                {thread.numberComments}
+              </dd>
             </div>
             {thread.tags?.length > 0 && (
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">Tags</dt>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground/70">
+                  Tags
+                </dt>
                 <dd className="mt-1.5 flex flex-wrap gap-1">
                   {thread.tags.map((tag) => (
                     <Link
